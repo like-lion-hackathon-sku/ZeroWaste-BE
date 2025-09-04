@@ -64,7 +64,7 @@ model Favorites {
 
 enum FoodCategory {
   KOREAN
-  JAPAESE
+  JAPANESE
   CHINESE
   WESTERN
   FASTFOOD
