@@ -1,0 +1,115 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id                      Int                       @id @default(autoincrement())
+  email                   String                    @unique(map: "email") @db.VarChar(40)
+  password                String                    @db.VarChar(60)
+  nickname                String?                   @db.VarChar(10)
+  profile                 String?                   @db.VarChar(50) @unique
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt               DateTime?                 @updatedAt @map("updated_at")
+  isCompleted             Boolean                   @default(false) @map("is_completed")
+  refreshToken            RefreshToken[]
+  acquiredBadges          AcquiredBadges[]
+  favorites               Favorites[]
+  reviews                 Reviews[]
+  @@map("user")
+}
+model RefreshToken {
+  id         Int       @id @default(autoincrement())
+  token      String    @db.Text
+  userId     Int       @map("user_id")
+  updatedAt  DateTime? @updatedAt @map("updated_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_token")
+}
+model Badges {
+  id          Int       @id @default(autoincrement())
+  name        String    @db.VarChar(30) @unique
+  description String    @db.Text
+  acquiredBadges AcquiredBadges[]
+  @@map("badges")
+}
+model AcquiredBadges {
+  id          Int       @id @default(autoincrement())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      Int       @map("user_id")
+  badges      Badges    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  badgeId     Int       @map("badge_id")
+  acquiredAt  DateTime  @default(now()) @map("acquired_at")
+  @@map("acquired_badges")
+}
+model Favorites {
+  id            Int         @id @default(autoincrement())
+  restaurants   Restaurants @relation(fields: [restaurantsId], references: [id], onDelete: Cascade)
+  restaurantsId Int         @map("restaurant_id")
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        Int         @map("user_id")
+  @@map("favorites")
+}
+
+enum FoodCategory {
+  KOREAN
+  JAPANESE
+  CHINESE
+  WESTERN
+  FASTFOOD
+  CAFE
+  ETC
+}
+
+model Restaurants {
+  id            Int          @id @default(autoincrement())
+  name          String       @db.VarChar(50)
+  category      FoodCategory
+  address       String       @db.Text
+  telephone     String       @db.VarChar(15)
+  mapx          Int?
+  mapy          Int?
+  isSponsored   Boolean      @default(false) @map("is_sponsored")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+
+  favorites     Favorites[]
+  reviews       Reviews[]
+
+  @@map("restaurants")
+}
+
+model Reviews {
+  id            Int         @id @default(autoincrement())
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        Int         @map("user_id")
+  restaurants   Restaurants @relation(fields: [restaurantsId], references: [id], onDelete: Cascade)
+  restaurantsId Int         @map("restaurant_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  reviewPhotos  ReviewPhotos[]
+
+  @@map("reviews")
+}
+model ReviewPhotos {
+  id            Int         @id @default(autoincrement())
+  reviews       Reviews     @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  reviewId      Int         @map("review_id")
+  imageName     String      @db.VarChar(50) @unique
+  leftoverRatio Float       @default(1)
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@map("review_photos")
+}
