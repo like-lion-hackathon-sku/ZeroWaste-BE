@@ -1,9 +1,0 @@
-node_modules
-# Keep environment variables out of version control
-.env
-
-/src/generated/prisma
-
-echo ".DS_Store" >> .gitignore
-git add .gitignore
-git commit -m "chore: .gitignore에 .DS_Store 추가"
