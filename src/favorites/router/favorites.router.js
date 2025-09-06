@@ -16,6 +16,17 @@ function onlyDigits404(req, res, next) {
   }
   next();
 }
+function requireAuth(req, res, next) {
+  if (!req.user?.id) {
+    return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
+  }
+  next();
+}
+
+/* ───────── 미들웨어 ───────── */
+r.use(requireAuth);
+
+/* ───────── 라우트 ───────── */
 
 /**
  * #swagger.tags = ['Favorites']
