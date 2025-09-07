@@ -165,6 +165,36 @@ async function findPlaceIdByLocalApi(name, address) {
 
   for (const q of tryQueries) {
     const r = await axios.get(url, {
+      params: { query: q, display: 5 }, // ← 5개
+      headers,
+      timeout: 7000,
+      validateStatus: (s) => s >= 200 && s < 500,
+    });
+    if (r.status >= 400) continue;
+
+    const items = r.data?.items ?? [];
+    for (const item of items) {
+      const id = extractPlaceIdFromUrl(item.link);
+      if (id) {
+        return {
+          id,
+          fixedName: stripTags(item.title),
+          fixedAddr: item.roadAddress || item.address || "",
+        };
+      }
+    }
+  }
+  return null;
+}
+
+  const tryQueries = [
+    address ? `${normalizeName(name)} ${address}` : normalizeName(name),
+    address || "",
+    normalizeName(name),
+  ].filter(Boolean);
+
+  for (const q of tryQueries) {
+    const r = await axios.get(url, {
       params: { query: q, display: 1 },
       headers,
       timeout: 7000,
