@@ -1,4 +1,3 @@
-// 위치: src/restaurants/service/restaurants.service.js
 import * as restRepo from "../repository/restaurants.repository.js";
 import { getNaverMenusAndPhotos } from "./naver.service.js";
 
@@ -78,7 +77,7 @@ export async function getRestaurantDetail(restaurantId, userId) {
   return { ...detail, isFavorite: favorite };
 }
 
-/** 외부 네이버 상세조회 — 이 버전 하나만 남겨두세요 */
+/** 외부 네이버 상세조회 — 이 버전 하나만 유지 */
 export async function getRestaurantExternalDetail(restaurantId) {
   const base = await restRepo.findById(restaurantId);
   if (!base) {
@@ -97,18 +96,6 @@ export async function getRestaurantExternalDetail(restaurantId) {
     console.warn("[NAVER][EXTERNAL-FAIL]", e?.status || e?.message || e);
     ext = {};
   }
-
-  return {
-    restaurantId: base.id,
-    name: base.name,
-    address: base.address,
-    telephone: ext?.telephone ?? base.telephone ?? "",
-    category: ext?.category ?? base.category ?? "",
-    menus: ext?.menus ?? [],
-    photos: ext?.photos ?? [],
-    placeId: ext?.placeId ?? null,
-  };
-}
 
   return {
     restaurantId: base.id,
