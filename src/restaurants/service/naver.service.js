@@ -4,6 +4,9 @@ import axios from "axios";
 
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID ?? "";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET ?? "";
+const dlog = (...args) => {
+  if (process.env.DEBUG_NAVER === "1") console.log(...args);
+};
 
 /* ================= 공통 유틸 ================= */
 function stripTags(s = "") {
@@ -27,23 +30,16 @@ function extractPlaceIdFromUrl(url = "") {
   if (!url) return null;
   try {
     const u = new URL(url);
-    // 쿼리스트링에서 흔한 키들을 전부 체크
     for (const key of ["placeId", "id", "code"]) {
       const v = u.searchParams.get(key);
-      if (v && /^\d{4,}$/.test(v)) return v; // 4자리 이상
+      if (v && /^\d{4,}$/.test(v)) return v;
     }
-  } catch {} // URL 파싱 실패시 아래 문자열 매칭으로
-
+  } catch {}
   const s = String(url);
-
-  // /entry/place/{id}, /place/{id}, /restaurant/{id}
   let m = s.match(/(?:entry\/place|place|restaurant)\/(\d{4,})(?:[/?#]|$)/);
   if (m) return m[1];
-
-  // placeId=123456, id=123456, code=123456 등
   m = s.match(/(?:placeId|id|code)=(\d{4,})/);
   if (m) return m[1];
-
   return null;
 }
 
@@ -105,10 +101,7 @@ function parseMenusAndPhotosFromHTML(html) {
         }
       });
     }
-  } catch {
-    // 파싱 실패는 빈 결과 허용
-  }
-
+  } catch {}
   return { menus, photos, telephone, address, category };
 }
 
@@ -129,6 +122,12 @@ export async function searchLocal(query, display = 10) {
     },
     timeout: 7000,
     validateStatus: (s) => s >= 200 && s < 500,
+  });
+
+  dlog("[NAVER][LOCAL-RES]", {
+    status: res.status,
+    len: res.data?.items?.length ?? 0,
+    errorMessage: res.data?.errorMessage ?? res.data?.message ?? null,
   });
 
   if (res.status >= 400) {
@@ -167,7 +166,6 @@ async function resolvePlaceIdFromLink(link) {
   };
 
   try {
-    // 1) HEAD로 최종 URL만 확인
     try {
       const h = await axios.head(link, opts);
       const final1 = h?.request?.res?.responseUrl ?? h?.request?.path ?? link;
@@ -175,7 +173,6 @@ async function resolvePlaceIdFromLink(link) {
       if (id1) return id1;
     } catch {}
 
-    // 2) GET으로 HTML 본문 확인
     const r = await axios.get(link, opts);
     const finalUrl = r?.request?.res?.responseUrl ?? r?.request?.path ?? link;
     const id2 = extractPlaceIdFromUrl(finalUrl);
@@ -210,7 +207,7 @@ async function findPlaceIdByLocalApi(name, address) {
 
   for (const q of tryQueries) {
     const r = await axios.get(url, {
-      params: { query: q, display: 5 }, // 후보 5개
+      params: { query: q, display: 5 },
       headers,
       timeout: 7000,
       validateStatus: (s) => s >= 200 && s < 500,
@@ -219,11 +216,15 @@ async function findPlaceIdByLocalApi(name, address) {
 
     const items = r.data?.items ?? [];
     for (const item of items) {
-      // console.debug("[NAVER][TRY]", { q, link: item.link, title: stripTags(item.title) });
+      dlog("[NAVER][TRY]", {
+        q,
+        link: item.link,
+        title: stripTags(item.title),
+      });
       let id = extractPlaceIdFromUrl(item.link);
       if (!id) {
         id = await resolvePlaceIdFromLink(item.link);
-        // console.debug("[NAVER][RESOLVE]", { link: item.link, id });
+        dlog("[NAVER][RESOLVE]", { link: item.link, id });
       }
       if (id) {
         return {
@@ -253,11 +254,16 @@ async function findPlaceIdByWebSearch(name, address) {
       timeout: 7000,
       validateStatus: (s) => s >= 200 && s < 500,
     });
+    dlog("[NAVER][WEBKR-STATUS]", {
+      status: r.status,
+      len: r.data?.items?.length ?? 0,
+    });
     if (r.status >= 400) return null;
 
     const items = r.data?.items ?? [];
     for (const it of items) {
       const cand = it.link || it.url || it.description || "";
+      dlog("[NAVER][WEBKR-ITEM]", { cand });
       const id =
         extractPlaceIdFromUrl(cand) || extractPlaceIdFromUrl(stripTags(cand));
       if (id) return { id };
@@ -276,7 +282,6 @@ export async function getNaverMenusAndPhotos(args = {}) {
 
   let { placeId, name, address } = args;
 
-  // placeId 없으면 보조 탐색으로 확보
   if (!placeId) {
     let hit = await findPlaceIdByLocalApi(name, address);
     if (!hit) hit = await findPlaceIdByWebSearch(name, address); // fallback
@@ -297,7 +302,6 @@ export async function getNaverMenusAndPhotos(args = {}) {
     address = address ?? hit.fixedAddr;
   }
 
-  // 상세 HTML 파싱
   const placeUrl = `https://pcmap.place.naver.com/restaurant/${placeId}/home`;
   const hRes = await axios.get(placeUrl, {
     headers: {
