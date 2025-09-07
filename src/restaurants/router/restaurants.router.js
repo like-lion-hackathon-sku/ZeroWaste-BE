@@ -14,6 +14,8 @@ r.get("/nearby", getNearbyRestaurantsCtrl);
 // 식당 상세조회
 r.get("/:restaurantId/detail", getRestaurantFullDetailCtrl);
 
+r.get("/:restaurantId", getRestaurantFullDetailCtrl);
+
 /** 식당 확보(멱등) */
 r.put("/", ensureRestaurantCtrl);
 
