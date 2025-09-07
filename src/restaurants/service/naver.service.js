@@ -1,7 +1,8 @@
+import "dotenv/config"; // ← 이 한 줄만 추가 (.env 불러오기)
 import axios from "axios";
 
-const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID;
-const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET;
+const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID ?? "";
+const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET ?? "";
 
 /** 지역 검색 */
 export async function searchLocal(query, display = 10) {
