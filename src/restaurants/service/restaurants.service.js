@@ -2,6 +2,38 @@
 import * as restRepo from "../repository/restaurants.repository.js";
 import { getNaverMenusAndPhotos } from "./naver.service.js";
 
+/** 외부 네이버 상세조회 */
+export async function getRestaurantExternalDetail(restaurantId) {
+  const base = await restRepo.findById(restaurantId);
+  if (!base) {
+    const err = new Error("RESTAURANT_NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+
+  let ext = null;
+  try {
+    ext = await getNaverMenusAndPhotos({
+      name: base.name,
+      address: base.address,
+    });
+  } catch (e) {
+    console.warn("[NAVER][EXTERNAL-FAIL]", e?.status || e?.message || e);
+    ext = {};
+  }
+
+  return {
+    restaurantId: base.id,
+    name: base.name,
+    address: base.address,
+    telephone: ext?.telephone ?? base.telephone ?? "",
+    category: ext?.category ?? base.category ?? "",
+    menus: ext?.menus ?? [],
+    photos: ext?.photos ?? [],
+    placeId: ext?.placeId ?? null,
+  };
+}
+
 function toFoodCategoryEnum(input) {
   if (!input) return "ETC";
   const s = String(input).toLowerCase().trim();
