@@ -150,6 +150,7 @@ export async function searchLocal(query, display = 10) {
 }
 
 /* ============ placeId 탐색 보조(재시도 전략) ============ */
+// 기존 함수 교체
 async function findPlaceIdByLocalApi(name, address) {
   const url = "https://openapi.naver.com/v1/search/local.json";
   const headers = {
@@ -165,7 +166,7 @@ async function findPlaceIdByLocalApi(name, address) {
 
   for (const q of tryQueries) {
     const r = await axios.get(url, {
-      params: { query: q, display: 5 }, // ← 5개
+      params: { query: q, display: 5 }, // ← 5개 확인
       headers,
       timeout: 7000,
       validateStatus: (s) => s >= 200 && s < 500,
@@ -227,7 +228,9 @@ export async function getNaverMenusAndPhotos(args = {}) {
 
   // placeId 없으면 보조 탐색으로 확보
   if (!placeId) {
-    const hit = await findPlaceIdByLocalApi(name, address);
+    let hit = await findPlaceIdByLocalApi(name, address);
+    if (!hit) hit = await findPlaceIdByWebSearch(name, address); // ← fallback 추가
+
     if (!hit) {
       return {
         placeId: null,
@@ -262,4 +265,29 @@ export async function getNaverMenusAndPhotos(args = {}) {
 
   const parsed = parseMenusAndPhotosFromHTML(hRes.data);
   return { placeId, name, address, ...parsed };
+}
+
+async function findPlaceIdByWebSearch(name, address) {
+  const url = "https://openapi.naver.com/v1/search/webkr.json";
+  const headers = {
+    "X-Naver-Client-Id": NAVER_CLIENT_ID,
+    "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+  };
+  const q = [normalizeName(name), address].filter(Boolean).join(" ");
+
+  const r = await axios.get(url, {
+    params: { query: `site:pcmap.place.naver.com ${q}`, display: 5 },
+    headers,
+    timeout: 7000,
+    validateStatus: (s) => s >= 200 && s < 500,
+  });
+  if (r.status >= 400) return null;
+
+  const items = r.data?.items ?? [];
+  for (const it of items) {
+    const cand = it.link || it.url || it.description || "";
+    const id = extractPlaceIdFromUrl(cand) || extractPlaceIdFromUrl(stripTags(cand));
+    if (id) return { id };
+  }
+  return null;
 }
