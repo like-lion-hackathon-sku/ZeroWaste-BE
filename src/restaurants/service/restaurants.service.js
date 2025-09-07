@@ -109,3 +109,15 @@ export async function getRestaurantExternalDetail(restaurantId) {
     placeId: ext?.placeId ?? null,
   };
 }
+
+  return {
+    restaurantId: base.id,
+    name: base.name,
+    address: base.address,
+    telephone: ext?.telephone ?? base.telephone ?? "",
+    category: ext?.category ?? base.category ?? "",
+    menus: ext?.menus ?? [],
+    photos: ext?.photos ?? [],
+    placeId: ext?.placeId ?? null,
+  };
+}
