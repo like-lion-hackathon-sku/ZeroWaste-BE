@@ -19,10 +19,20 @@ function toNumberOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 function normalizeName(s = "") {
-  return String(s)
-    .replace(/\s+/g, " ")
-    .replace(/[()[\]{}・·~\-_/|★☆]+/g, " ")
-    .trim();
+  return (
+    String(s)
+      // 따옴표류 제거
+      .replace(/[’'`"]/g, "")
+      // & 기호를 한글 발음으로
+      .replace(/[&＆]/g, " 앤 ")
+      // 공백 정리 1차
+      .replace(/\s+/g, " ")
+      // 자주 끼는 특수문자 → 공백
+      .replace(/[()[\]{}・·~\-_/|★☆]+/g, " ")
+      // 공백 정리 2차(앞 변환 과정에서 생긴 이중 공백 제거)
+      .replace(/\s{2,}/g, " ")
+      .trim()
+  );
 }
 function getHost(u = "") {
   try {
