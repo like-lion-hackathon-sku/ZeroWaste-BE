@@ -98,18 +98,6 @@ export async function ensureRestaurant({ restaurantId, place }) {
   return await syncExternalPlace(place);
 }
 
-/** DB 상세조회 */
-export async function getRestaurantDetail(restaurantId, userId) {
-  const detail = await restRepo.findDetailById(restaurantId);
-  if (!detail) {
-    const err = new Error("RESTAURANT_NOT_FOUND");
-    err.status = 404;
-    throw err;
-  }
-  const favorite = await restRepo.isFavorite(userId, restaurantId);
-  return { ...detail, isFavorite: favorite };
-}
-
 /** 외부 네이버 상세조회 */
 export async function getRestaurantExternalDetail(restaurantId) {
   const base = await restRepo.findById(restaurantId);
