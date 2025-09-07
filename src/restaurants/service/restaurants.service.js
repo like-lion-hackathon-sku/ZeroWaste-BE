@@ -2,24 +2,26 @@ import * as restRepo from "../repository/restaurants.repository.js";
 import { getNaverMenusAndPhotos } from "./naver.service.js";
 
 function toFoodCategoryEnum(input) {
-  if (!input) return "ETC";
-  const s = String(input).toLowerCase().trim();
-  const map = {
-    한식: "KOREAN",
-    일식: "JAPANESE",
-    중식: "CHINESE",
-    양식: "WESTERN",
-    분식: "FASTFOOD",
-    패스트푸드: "FASTFOOD",
-    카페: "CAFE",
-    cafe: "CAFE",
-    korean: "KOREAN",
-    japanese: "JAPANESE",
-    chinese: "CHINESE",
-    western: "WESTERN",
-    fastfood: "FASTFOOD",
-  };
-  return map[s] ?? "ETC";
+  const s = String(input || "").toLowerCase();
+  const pairs = [
+    ["한식", "KOREAN"],
+    ["korean", "KOREAN"],
+    ["일식", "JAPANESE"],
+    ["japanese", "JAPANESE"],
+    ["중식", "CHINESE"],
+    ["chinese", "CHINESE"],
+    ["양식", "WESTERN"],
+    ["이탈리아", "WESTERN"],
+    ["western", "WESTERN"],
+    ["분식", "FASTFOOD"],
+    ["패스트푸드", "FASTFOOD"],
+    ["fastfood", "FASTFOOD"],
+    ["카페", "CAFE"],
+    ["cafe", "CAFE"],
+    ["커피", "CAFE"],
+  ];
+  for (const [kw, code] of pairs) if (s.includes(kw)) return code;
+  return "ETC";
 }
 
 function normalizePlacePayload(place = {}) {
