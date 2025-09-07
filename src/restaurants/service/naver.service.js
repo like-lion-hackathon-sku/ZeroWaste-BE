@@ -21,8 +21,38 @@ function toNumberOrNull(v) {
 function normalizeName(s = "") {
   return String(s)
     .replace(/\s+/g, " ")
-    .replace(/[()[\]{}・·~\-_/|★☆]+/g, " ")
+    .replace(/[()[\]{}・·~\-_/|★☆&]+/g, " ")
     .trim();
+}
+
+function generateNameVariants(name = "") {
+  const base = String(name).trim();
+
+  // 기초 정규화
+  const norm = normalizeName(base);
+
+  // &/앤/and/앤드 치환 + 띄어쓰기 버전들
+  const withAmp = norm.replace(/앤/gi, "&").replace(/\s*&\s*/g, "&");
+  const withAndKo = norm.replace(/&/g, "앤");
+  const withAndEn = norm.replace(/&/g, "and");
+  const spaced1 = norm.replace(/(라운지)\s*(앤|&|and)\s*(바)/gi, "$1 $2 $3");
+  const noSpace = norm.replace(/\s+/g, "");
+
+  // 중복 제거
+  const set = new Set([
+    base,
+    norm,
+    withAmp,
+    withAndKo,
+    withAndEn,
+    spaced1,
+    noSpace,
+    // ‘라운지바’로 붙여 쓰는 경우까지
+    norm.replace(/라운지\s*바/gi, "라운지바"),
+  ]);
+
+  // 너무 짧은/공백 문자열 제거
+  return [...set].filter((s) => s && s.length >= 2);
 }
 /** 주소 단순화: 광역/구/로/길만 남기고 번지/층/호수 제거 */
 function normalizeAddress(addr = "") {
