@@ -153,7 +153,7 @@ export async function searchLocal(query, display = 10) {
 async function resolvePlaceIdFromLink(link) {
   if (!link) return null;
   const opts = {
-    timeout: 9000,
+    timeout: 10000,
     maxRedirects: 10,
     headers: {
       "User-Agent":
@@ -166,6 +166,7 @@ async function resolvePlaceIdFromLink(link) {
   };
 
   try {
+    // 1) HEAD로 최종 URL 확인
     try {
       const h = await axios.head(link, opts);
       const final1 = h?.request?.res?.responseUrl ?? h?.request?.path ?? link;
@@ -173,20 +174,36 @@ async function resolvePlaceIdFromLink(link) {
       if (id1) return id1;
     } catch {}
 
+    // 2) GET으로 HTML 수집
     const r = await axios.get(link, opts);
     const finalUrl = r?.request?.res?.responseUrl ?? r?.request?.path ?? link;
-    const id2 = extractPlaceIdFromUrl(finalUrl);
-    if (id2) return id2;
 
+    // 2-1) 최종 URL에서 바로 추출
+    let id = extractPlaceIdFromUrl(finalUrl);
+    if (id) return id;
+
+    // 2-2) HTML 본문에서 추출 (검색 페이지 핵심)
     const html = String(r.data || "");
-    const m1 = html.match(
-      /https?:\/\/(?:pcmap|map)\.place\.naver\.com\/(?:restaurant|place)\/(\d{5,})/,
-    );
-    if (m1) return m1[1];
-    const m2 = html.match(/data-place-id=["'](\d{5,})["']/);
-    if (m2) return m2[1];
-    const m3 = html.match(/placeId=(\d{5,})/);
-    if (m3) return m3[1];
+    id = extractPlaceIdFromHtml(html);
+    if (id) return id;
+
+    // 3) 마지막 구제: <title>/og:title에서 상호명 뽑아 Local 재검색
+    const t =
+      html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ||
+      html.match(
+        /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+      )?.[1] ||
+      null;
+    if (t) {
+      const rough = stripTags(t)
+        .trim()
+        .replace(/\s*[:\-–|]\s*네이버\s*지도.*$/i, "")
+        .trim();
+      try {
+        const reHit = await findPlaceIdByLocalApi(rough, "");
+        if (reHit?.id) return reHit.id;
+      } catch {}
+    }
   } catch {}
   return null;
 }
@@ -320,4 +337,61 @@ export async function getNaverMenusAndPhotos(args = {}) {
 
   const parsed = parseMenusAndPhotosFromHTML(hRes.data);
   return { placeId, name, address, ...parsed };
+}
+
+function extractPlaceIdFromHtml(html = "") {
+  const s = String(html);
+
+  // canonical / og:url 에 직접 들어있는 경우
+  let m =
+    s.match(
+      /<link[^>]+rel=["']canonical["'][^>]+href=["'][^"']*(?:restaurant|place)\/(\d{4,})/i,
+    ) ||
+    s.match(
+      /<meta[^>]+property=["']og:url["'][^>]+content=["'][^"']*(?:restaurant|place)\/(\d{4,})/i,
+    );
+  if (m) return m[1];
+
+  // __NEXT_DATA__ 내부 JSON에서 추출
+  const nextMatch = s.match(/id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+  if (nextMatch) {
+    try {
+      const json = JSON.parse(nextMatch[1]);
+      const str = JSON.stringify(json);
+      m =
+        str.match(/(?:entry\/place|place|restaurant)\/(\d{4,})/) ||
+        str.match(/"placeId"\s*:\s*"(\d{4,})"/) ||
+        str.match(/"poiId"\s*:\s*(\d{4,})/) ||
+        str.match(/"id"\s*:\s*(\d{4,})(?!\s*")/);
+      if (m) return m[1];
+    } catch {}
+  }
+
+  // window.__APOLLO_STATE__ 등 초기 스냅샷에서 추출
+  const apolloMatch = s.match(
+    /window\.__APOLLO_STATE__\s*=\s*(.*?);\s*<\/script>/s,
+  );
+  if (apolloMatch) {
+    try {
+      const json = JSON.parse(apolloMatch[1]);
+      const str = JSON.stringify(json);
+      m =
+        str.match(/(?:entry\/place|place|restaurant)\/(\d{4,})/) ||
+        str.match(/"placeId"\s*:\s*"(\d{4,})"/) ||
+        str.match(/"poiId"\s*:\s*(\d{4,})/) ||
+        str.match(/"id"\s*:\s*(\d{4,})(?!\s*")/);
+      if (m) return m[1];
+    } catch {}
+  }
+
+  // 일반 본문 내 URL/쿼리 문자열에서 추출
+  m =
+    s.match(
+      /https?:\/\/(?:pcmap|map)\.place\.naver\.com\/(?:restaurant|place)\/(\d{4,})/,
+    ) ||
+    s.match(/(?:entry\/place|place|restaurant)\/(\d{4,})(?=[/?#\s"'])/) ||
+    s.match(/(?:placeId|poiId|id|code)=(\d{4,})/);
+  if (m) return m[1];
+
+  return null;
 }
