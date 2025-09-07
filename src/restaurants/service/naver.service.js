@@ -19,20 +19,30 @@ function toNumberOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 function normalizeName(s = "") {
-  return (
-    String(s)
-      // 따옴표류 제거
-      .replace(/[’'`"]/g, "")
-      // & 기호를 한글 발음으로
-      .replace(/[&＆]/g, " 앤 ")
-      // 공백 정리 1차
+  return String(s)
+    .replace(/\s+/g, " ")
+    .replace(/[()[\]{}・·~\-_/|★☆]+/g, " ")
+    .trim();
+}
+/** 주소 단순화: 광역/구/로/길만 남기고 번지/층/호수 제거 */
+function normalizeAddress(addr = "") {
+  const s = String(addr)
+    .replace(/\s+/g, " ")
+    .replace(/\b(?:B\d+|지하\d*층|지상\d*층|[0-9]+동|[0-9]+호)\b/gi, "")
+    .replace(/\b(\d{1,4})(?:-\d{1,3})?\b/g, "") // 번지 제거
+    .replace(/[(),]/g, " ")
+    .trim();
+  // 너무 짧아지면 원본도 같이 쓸 수 있게 둘 다 리턴
+  return {
+    short: s
+      .replace(
+        /\b(대한민국|서울특별시|경기도|인천광역시|부산광역시|대구광역시|대전광역시|광주광역시|울산광역시)\b/g,
+        "",
+      )
       .replace(/\s+/g, " ")
-      // 자주 끼는 특수문자 → 공백
-      .replace(/[()[\]{}・·~\-_/|★☆]+/g, " ")
-      // 공백 정리 2차(앞 변환 과정에서 생긴 이중 공백 제거)
-      .replace(/\s{2,}/g, " ")
-      .trim()
-  );
+      .trim(),
+    full: String(addr).trim(),
+  };
 }
 function getHost(u = "") {
   try {
@@ -250,6 +260,7 @@ async function resolvePlaceIdFromLink(link) {
   };
 
   try {
+    // 1) HEAD로 최종 URL 확인
     try {
       const h = await axios.head(link, opts);
       const final1 = h?.request?.res?.responseUrl ?? h?.request?.path ?? link;
@@ -257,17 +268,20 @@ async function resolvePlaceIdFromLink(link) {
       if (id1) return id1;
     } catch {}
 
+    // 2) GET으로 HTML 수집
     const r = await axios.get(link, opts);
     const finalUrl = r?.request?.res?.responseUrl ?? r?.request?.path ?? link;
 
+    // 2-1) 최종 URL에서 바로 추출
     let id = extractPlaceIdFromUrl(finalUrl);
     if (id) return id;
 
+    // 2-2) HTML 본문에서 추출
     const html = String(r.data || "");
     id = extractPlaceIdFromHtml(html);
     if (id) return id;
 
-    // fallback: <title>/og:title 재검색
+    // 3) <title>/og:title에서 상호 추출 후 Local 재검색
     const t =
       html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ||
       html.match(
@@ -295,15 +309,18 @@ async function findPlaceIdByLocalApi(name, address) {
     "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
   };
 
-  const tryQueries = [
-    address ? `${normalizeName(name)} ${address}` : normalizeName(name),
+  // 주소를 두 형태로(축약/원본) 쿼리 조합
+  const { short, full } = normalizeAddress(address || "");
+  const qCandidates = [
+    [normalizeName(name), full].filter(Boolean).join(" "),
+    [normalizeName(name), short].filter(Boolean).join(" "),
     normalizeName(name),
-    (address || "").replace(/\s?(?:B\d+|지하\d+층|[0-9]+호)\b/g, "").trim(),
+    short,
   ].filter(Boolean);
 
-  for (const q of tryQueries) {
+  for (const q of qCandidates) {
     const r = await axios.get(url, {
-      params: { query: q, display: 10 }, // ← 확대
+      params: { query: q, display: 10 },
       headers,
       timeout: 7000,
       validateStatus: (s) => s >= 200 && s < 500,
@@ -361,29 +378,28 @@ async function findPlaceIdByWebSearch(name, address) {
     "site:place.naver.com",
   ];
 
+  const { short, full } = normalizeAddress(address || "");
   const baseNames = [normalizeName(name)];
   if (name) baseNames.push(`"${normalizeName(name)}"`);
 
-  const baseAddrs = [];
-  if (address) baseAddrs.push(address, `"${address}"`);
+  const addrs = [];
+  if (full) addrs.push(full, `"${full}"`);
+  if (short) addrs.push(short, `"${short}"`);
 
   const queryCombos = [];
   for (const site of siteQueries) {
     for (const nm of baseNames) {
-      for (const ad of baseAddrs.length ? baseAddrs : [""]) {
-        const q = [site, nm, ad].filter(Boolean).join(" ");
-        queryCombos.push(q);
+      if (addrs.length) {
+        for (const ad of addrs) queryCombos.push([site, nm, ad].join(" "));
       }
       queryCombos.push([site, nm].join(" "));
     }
   }
 
   const seen = new Set();
-  const uniqueQueries = queryCombos.filter((q) => {
-    if (seen.has(q)) return false;
-    seen.add(q);
-    return true;
-  });
+  const uniqueQueries = queryCombos.filter((q) =>
+    seen.has(q) ? false : seen.add(q),
+  );
 
   for (const q of uniqueQueries) {
     try {
@@ -415,6 +431,37 @@ async function findPlaceIdByWebSearch(name, address) {
   return null;
 }
 
+/* ============ placeId 탐색: 네이버 지도 검색(최후 fallback) ============ */
+async function findPlaceIdByNaverMapSearch(name, address) {
+  const { short, full } = normalizeAddress(address || "");
+  const q = encodeURIComponent(
+    [normalizeName(name), full || short].filter(Boolean).join(" "),
+  );
+  const url = `https://map.naver.com/v5/search/${q}`;
+
+  try {
+    const r = await axios.get(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+      },
+      timeout: 8000,
+      validateStatus: (s) => s >= 200 && s < 500,
+    });
+
+    const html = String(r.data || "");
+    // URL/스크립트 내에 흔히 보이는 placeId 패턴들
+    let id =
+      extractPlaceIdFromHtml(html) ||
+      (html.match(/"placeId"\s*:\s*"(\d{4,})"/)?.[1] ?? null) ||
+      (html.match(/"id"\s*:\s*(\d{4,})(?!\s*")/)?.[1] ?? null);
+
+    if (id) return { id };
+  } catch {}
+  return null;
+}
+
 /* ========================= 외부 상세(메뉴/사진) ========================= */
 export async function getNaverMenusAndPhotos(args = {}) {
   if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) {
@@ -426,10 +473,17 @@ export async function getNaverMenusAndPhotos(args = {}) {
   let { placeId, name, address } = args;
 
   if (!placeId) {
+    // 1) Local API
     let hit = await findPlaceIdByLocalApi(name, address);
-    if (!hit) hit = await findPlaceIdByWebSearch(name, address); // fallback
+
+    // 2) WebKR
+    if (!hit) hit = await findPlaceIdByWebSearch(name, address);
+
+    // 3) 네이버 지도 검색
+    if (!hit) hit = await findPlaceIdByNaverMapSearch(name, address);
 
     if (!hit) {
+      dlog("[NAVER][PLACEID-NOT-FOUND]", { name, address });
       return {
         placeId: null,
         name,
