@@ -395,3 +395,35 @@ function extractPlaceIdFromHtml(html = "") {
 
   return null;
 }
+
+export async function getRestaurantExternalDetail(restaurantId) {
+  const base = await restRepo.findById(restaurantId);
+  if (!base) {
+    const err = new Error("RESTAURANT_NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+
+  let ext = null;
+  try {
+    ext = await getNaverMenusAndPhotos({
+      name: base.name,
+      address: base.address,
+    });
+  } catch (e) {
+    // 외부 실패는 로그만 남기고 빈 값으로 진행
+    console.warn("[NAVER][EXTERNAL-FAIL]", e?.status || e?.message || e);
+    ext = {};
+  }
+
+  return {
+    restaurantId: base.id,
+    name: base.name,
+    address: base.address,
+    telephone: ext?.telephone ?? base.telephone ?? "",
+    category: ext?.category ?? base.category ?? "",
+    menus: ext?.menus ?? [],
+    photos: ext?.photos ?? [],
+    placeId: ext?.placeId ?? null,
+  };
+}
