@@ -1,21 +1,10 @@
+// 위치: src/restaurants/service/restaurants.service.js
 import * as restRepo from "../repository/restaurants.repository.js";
+import { getNaverMenusAndPhotos } from "./naver.service.js";
 
-/** 문자열 카테고리를 Prisma enum(FoodCategory)로 매핑 */
 function toFoodCategoryEnum(input) {
   if (!input) return "ETC";
-  const s = String(input).toUpperCase().trim();
-  if (
-    [
-      "KOREAN",
-      "JAPANESE",
-      "CHINESE",
-      "WESTERN",
-      "FASTFOOD",
-      "CAFE",
-      "ETC",
-    ].includes(s)
-  )
-    return s;
+  const s = String(input).toLowerCase().trim();
   const map = {
     한식: "KOREAN",
     일식: "JAPANESE",
@@ -31,19 +20,11 @@ function toFoodCategoryEnum(input) {
     western: "WESTERN",
     fastfood: "FASTFOOD",
   };
-  return map[s.toLowerCase()] ?? "ETC";
+  return map[s] ?? "ETC";
 }
 
-/** 외부 place payload 정규화/검증 (스키마 제약에 맞춤) */
 function normalizePlacePayload(place = {}) {
-  const {
-    name,
-    address,
-    category = null,
-    telephone = "",
-    mapx = null,
-    mapy = null,
-  } = place;
+  const { name, address, category, telephone, mapx, mapy } = place;
   if (!name || !address) {
     const err = new Error("INVALID_PLACE_PAYLOAD");
     err.status = 400;
@@ -59,19 +40,14 @@ function normalizePlacePayload(place = {}) {
   };
 }
 
-/** 외부 place → 내부 식당 멱등 동기화 (name+address 기준) */
 export async function syncExternalPlace(placePayload) {
   const p = normalizePlacePayload(placePayload);
   const byNA = await restRepo.findByNameAddress(p.name, p.address);
   if (byNA) return { restaurantId: byNA.id, created: false };
-  const created = await restRepo.create({
-    ...p,
-    isSponsored: false, // <-- 중요: camelCase로 넘김
-  });
+  const created = await restRepo.create({ ...p, isSponsored: false });
   return { restaurantId: created.id, created: true };
 }
 
-/** 식당 확보(멱등): id 유효하면 재사용, 아니면 place로 동기화 */
 export async function ensureRestaurant({ restaurantId, place }) {
   if (restaurantId == null && !place) {
     const err = new Error("RESTAURANT_ID_OR_PLACE_REQUIRED");
@@ -87,11 +63,10 @@ export async function ensureRestaurant({ restaurantId, place }) {
       throw err;
     }
   }
-  const { restaurantId: syncedId, created } = await syncExternalPlace(place);
-  return { restaurantId: syncedId, created: !!created };
+  return await syncExternalPlace(place);
 }
 
-/** 상세조회 */
+/** DB 상세조회 */
 export async function getRestaurantDetail(restaurantId, userId) {
   const detail = await restRepo.findDetailById(restaurantId);
   if (!detail) {
@@ -101,4 +76,28 @@ export async function getRestaurantDetail(restaurantId, userId) {
   }
   const favorite = await restRepo.isFavorite(userId, restaurantId);
   return { ...detail, isFavorite: favorite };
+}
+
+/** 외부 네이버 상세조회 */
+export async function getRestaurantExternalDetail(restaurantId) {
+  const base = await restRepo.findById(restaurantId);
+  if (!base) {
+    const err = new Error("RESTAURANT_NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+  const ext = await getNaverMenusAndPhotos({
+    name: base.name,
+    address: base.address,
+  });
+  return {
+    restaurantId: base.id,
+    name: base.name,
+    address: base.address,
+    telephone: ext?.telephone ?? base.telephone ?? "",
+    category: ext?.category ?? base.category ?? "",
+    menus: ext?.menus ?? [],
+    photos: ext?.photos ?? [],
+    placeId: ext?.placeId ?? null,
+  };
 }
