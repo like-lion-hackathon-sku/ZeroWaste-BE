@@ -1,5 +1,5 @@
 // 위치: src/restaurants/service/naver.service.js
-import "dotenv/config"; // Render/로컬 공통
+import "dotenv/config";
 import axios from "axios";
 
 /* ========================= 기본 설정/로그 ========================= */
@@ -35,17 +35,12 @@ function getHost(u = "") {
 function isNaverPlaceLink(link = "") {
   const host = getHost(link);
   if (!host.endsWith("naver.com")) return false;
-  // 대표 place 도메인만 허용
-  if (
+  return (
     host === "pcmap.place.naver.com" ||
     host === "map.place.naver.com" ||
     host === "place.naver.com" ||
     host === "m.place.naver.com"
-  ) {
-    return true;
-  }
-  // 그 외의 네이버 하위 도메인은 보수적으로 제외
-  return false;
+  );
 }
 
 /** 다양한 URL 패턴에서 placeId 추출 */
@@ -70,6 +65,7 @@ function extractPlaceIdFromUrl(url = "") {
 function extractPlaceIdFromHtml(html = "") {
   const s = String(html);
 
+  // canonical/og:url
   let m =
     s.match(
       /<link[^>]+rel=["']canonical["'][^>]+href=["'][^"']*(?:restaurant|place)\/(\d{4,})/i,
@@ -79,6 +75,7 @@ function extractPlaceIdFromHtml(html = "") {
     );
   if (m) return m[1];
 
+  // __NEXT_DATA__
   const nextMatch = s.match(/id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
   if (nextMatch) {
     try {
@@ -93,6 +90,7 @@ function extractPlaceIdFromHtml(html = "") {
     } catch {}
   }
 
+  // APOLLO STATE
   const apolloMatch = s.match(
     /window\.__APOLLO_STATE__\s*=\s*(.*?);\s*<\/script>/s,
   );
@@ -109,6 +107,7 @@ function extractPlaceIdFromHtml(html = "") {
     } catch {}
   }
 
+  // 일반 본문 내 URL/쿼리
   m =
     s.match(
       /https?:\/\/(?:pcmap|map)\.place\.naver\.com\/(?:restaurant|place)\/(\d{4,})/,
@@ -118,6 +117,66 @@ function extractPlaceIdFromHtml(html = "") {
   if (m) return m[1];
 
   return null;
+}
+
+/* ========================= 외부 상세 파서 ========================= */
+function parseMenusAndPhotosFromHTML(html) {
+  let raw = null;
+  const next = html.match(/id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
+  if (next) raw = next[1];
+  if (!raw) {
+    const apollo = html.match(/window\.__APOLLO_STATE__=(.*?);\s*<\/script>/s);
+    if (apollo) raw = apollo[1];
+  }
+
+  let menus = [];
+  let photos = [];
+  let telephone = "";
+  let address = "";
+  let category = "";
+
+  const walk = (node, fn) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach((v) => walk(v, fn));
+    if (typeof node === "object") {
+      fn(node);
+      for (const v of Object.values(node)) walk(v, fn);
+    }
+  };
+
+  try {
+    if (raw) {
+      const json = JSON.parse(raw);
+      walk(json, (obj) => {
+        if (!telephone && typeof obj.phone === "string") telephone = obj.phone;
+        if (!address && typeof obj.address === "string") address = obj.address;
+        if (!category && (obj.category || obj.categoryName))
+          category = obj.category || obj.categoryName;
+
+        const menuCands = [];
+        if (Array.isArray(obj.menus)) menuCands.push(...obj.menus);
+        if (Array.isArray(obj.menuList)) menuCands.push(...obj.menuList);
+        if (obj.menu && Array.isArray(obj.menu.items))
+          menuCands.push(...obj.menu.items);
+        for (const it of menuCands) {
+          const name = it?.name ?? it?.menuName ?? it?.title;
+          const price = it?.priceString ?? it?.price ?? it?.cost ?? null;
+          if (name) menus.push({ name, price });
+        }
+
+        const photoCands = [];
+        if (Array.isArray(obj.photos)) photoCands.push(...obj.photos);
+        if (Array.isArray(obj.images)) photoCands.push(...obj.images);
+        if (obj.photo && Array.isArray(obj.photo.items))
+          photoCands.push(...obj.photo.items);
+        for (const it of photoCands) {
+          const url = it?.url ?? it?.imageUrl;
+          if (url) photos.push({ url });
+        }
+      });
+    }
+  } catch {}
+  return { menus, photos, telephone, address, category };
 }
 
 /* ========================= 네이버 로컬 검색 ========================= */
@@ -198,7 +257,7 @@ async function resolvePlaceIdFromLink(link) {
     id = extractPlaceIdFromHtml(html);
     if (id) return id;
 
-    // fallback: <title>/og:title에서 상호 추출 후 재검색
+    // fallback: <title>/og:title 재검색
     const t =
       html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ||
       html.match(
@@ -234,7 +293,7 @@ async function findPlaceIdByLocalApi(name, address) {
 
   for (const q of tryQueries) {
     const r = await axios.get(url, {
-      params: { query: q, display: 5 },
+      params: { query: q, display: 10 }, // ← 확대
       headers,
       timeout: 7000,
       validateStatus: (s) => s >= 200 && s < 500,
@@ -251,7 +310,7 @@ async function findPlaceIdByLocalApi(name, address) {
     for (const item of items) {
       const link = item.link || "";
 
-      // 🔴 네이버 place/지도 링크만 처리
+      // 네이버 place/지도 링크만 처리
       if (!isNaverPlaceLink(link)) {
         dlog("[NAVER][SKIP-NON-NAVER]", {
           q,
@@ -279,37 +338,70 @@ async function findPlaceIdByLocalApi(name, address) {
   return null;
 }
 
-/* ============ placeId 탐색: 웹문서 검색(백업) ============ */
+/* ============ placeId 탐색: 웹문서 검색(백업, 확대) ============ */
 async function findPlaceIdByWebSearch(name, address) {
-  const url = "https://openapi.naver.com/v1/search/webkr.json";
   const headers = {
     "X-Naver-Client-Id": NAVER_CLIENT_ID,
     "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
   };
-  const q = [normalizeName(name), address].filter(Boolean).join(" ");
 
-  try {
-    const r = await axios.get(url, {
-      params: { query: `site:pcmap.place.naver.com ${q}`, display: 5 },
-      headers,
-      timeout: 7000,
-      validateStatus: (s) => s >= 200 && s < 500,
-    });
-    dlog("[NAVER][WEBKR-STATUS]", {
-      status: r.status,
-      len: r.data?.items?.length ?? 0,
-    });
-    if (r.status >= 400) return null;
+  const siteQueries = [
+    "site:pcmap.place.naver.com",
+    "site:m.place.naver.com",
+    "site:place.naver.com",
+  ];
 
-    const items = r.data?.items ?? [];
-    for (const it of items) {
-      const cand = it.link || it.url || it.description || "";
-      dlog("[NAVER][WEBKR-ITEM]", { cand });
-      const id =
-        extractPlaceIdFromUrl(cand) || extractPlaceIdFromUrl(stripTags(cand));
-      if (id) return { id };
+  const baseNames = [normalizeName(name)];
+  if (name) baseNames.push(`"${normalizeName(name)}"`);
+
+  const baseAddrs = [];
+  if (address) baseAddrs.push(address, `"${address}"`);
+
+  const queryCombos = [];
+  for (const site of siteQueries) {
+    for (const nm of baseNames) {
+      for (const ad of baseAddrs.length ? baseAddrs : [""]) {
+        const q = [site, nm, ad].filter(Boolean).join(" ");
+        queryCombos.push(q);
+      }
+      queryCombos.push([site, nm].join(" "));
     }
-  } catch {}
+  }
+
+  const seen = new Set();
+  const uniqueQueries = queryCombos.filter((q) => {
+    if (seen.has(q)) return false;
+    seen.add(q);
+    return true;
+  });
+
+  for (const q of uniqueQueries) {
+    try {
+      const r = await axios.get(
+        "https://openapi.naver.com/v1/search/webkr.json",
+        {
+          params: { query: q, display: 10 },
+          headers,
+          timeout: 7000,
+          validateStatus: (s) => s >= 200 && s < 500,
+        },
+      );
+      dlog("[NAVER][WEBKR-STATUS]", {
+        q,
+        status: r.status,
+        len: r.data?.items?.length ?? 0,
+      });
+      if (r.status >= 400) continue;
+
+      const items = r.data?.items ?? [];
+      for (const it of items) {
+        const cand = it.link || it.url || it.description || "";
+        const id =
+          extractPlaceIdFromUrl(cand) || extractPlaceIdFromUrl(stripTags(cand));
+        if (id) return { id };
+      }
+    } catch {}
+  }
   return null;
 }
 
@@ -343,15 +435,26 @@ export async function getNaverMenusAndPhotos(args = {}) {
     address = address ?? hit.fixedAddr;
   }
 
-  const placeUrl = `https://pcmap.place.naver.com/restaurant/${placeId}/home`;
-  const hRes = await axios.get(placeUrl, {
-    headers: {
-      "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)",
-      "Accept-Language": "ko-KR,ko;q=0.9",
-    },
-    timeout: 8000,
-    validateStatus: (s) => s >= 200 && s < 500,
-  });
+  // 상세 페이지: restaurant 우선, 실패 시 place로 재시도
+  const tryFetch = async (kind) => {
+    const url = `https://pcmap.place.naver.com/${kind}/${placeId}/home`;
+    const r = await axios.get(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)",
+        "Accept-Language": "ko-KR,ko;q=0.9",
+      },
+      timeout: 8000,
+      validateStatus: (s) => s >= 200 && s < 500,
+    });
+    return r;
+  };
+
+  let hRes = await tryFetch("restaurant");
+  if (hRes.status >= 400) {
+    dlog("[NAVER][RESTAURANT-FAIL]", hRes.status);
+    const alt = await tryFetch("place");
+    if (alt.status < 400) hRes = alt;
+  }
 
   if (hRes.status >= 400) {
     const err = new Error(`NAVER_PLACE_PAGE_FAILED(${hRes.status})`);
@@ -359,7 +462,6 @@ export async function getNaverMenusAndPhotos(args = {}) {
     throw err;
   }
 
-  // HTML 내부 JSON에서 메뉴/사진 꺼내기
   const parsed = parseMenusAndPhotosFromHTML(hRes.data);
   return { placeId, name, address, ...parsed };
 }
