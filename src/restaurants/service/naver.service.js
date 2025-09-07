@@ -27,24 +27,24 @@ function extractPlaceIdFromUrl(url = "") {
   if (!url) return null;
   try {
     const u = new URL(url);
-    const byQs = u.searchParams.get("placeId");
-    if (byQs && /^\d{5,}$/.test(byQs)) return byQs;
+    // 쿼리스트링에서 흔한 키들을 전부 체크
+    for (const key of ["placeId", "id", "code"]) {
+      const v = u.searchParams.get(key);
+      if (v && /^\d{4,}$/.test(v)) return v; // 4자리 이상
+    }
+  } catch {} // URL 파싱 실패시 아래 문자열 매칭으로
 
-    // /entry/place/{id}, /place/{id}, /restaurant/{id}
-    const m = url.match(
-      /(?:entry\/place|place|restaurant)\/(\d{5,})(?:[/?#]|$)/,
-    );
-    if (m) return m[1];
+  const s = String(url);
 
-    // placeId=123456 형태가 path/fragment/문자열에 있는 경우
-    const m2 = url.match(/placeId=(\d{5,})/);
-    if (m2) return m2[1];
+  // /entry/place/{id}, /place/{id}, /restaurant/{id}
+  let m = s.match(/(?:entry\/place|place|restaurant)\/(\d{4,})(?:[/?#]|$)/);
+  if (m) return m[1];
 
-    return null;
-  } catch {
-    const m = String(url).match(/(?:restaurant|place)\/(\d{5,})/);
-    return m ? m[1] : null;
-  }
+  // placeId=123456, id=123456, code=123456 등
+  m = s.match(/(?:placeId|id|code)=(\d{4,})/);
+  if (m) return m[1];
+
+  return null;
 }
 
 /* ================= 외부 상세 파서 ================= */
