@@ -50,7 +50,7 @@ const RESTAURANT_CATS = [
 ];
 
 function isRestaurantCategory(cat = "") {
-  const s = String(cat).toLowerCase();
+  const s = String(cat || "").toLowerCase();
   return (
     RESTAURANT_CATS.some((kw) => s.includes(kw.toLowerCase())) ||
     s.includes("음식점")
@@ -62,15 +62,25 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: "QUERY_REQUIRED" });
 
-    // 1) 네이버 검색 (최대 5개)
-    const raw = await searchLocal(q, 5);
+    // 1) 네이버 검색 (필요시 개수 조절)
+    const places = await searchLocal(q, 5);
 
-    // 2) 음식점만 선별
-    const places = raw.filter((p) => isRestaurantCategory(p.category));
+    // 2) 식당/카페 등만 통과
+    const filtered = places.filter((p) => isRestaurantCategory(p?.category));
 
-    // 3) DB 멱등 등록 + 점수 조인
+    // 3) 이름+주소 기준 중복 제거 (네이버가 같은 항목을 중복 반환하는 경우 방지)
+    const uniq = [];
+    const seen = new Set();
+    for (const p of filtered) {
+      const key = `${p.name}__${p.address}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      uniq.push(p);
+    }
+
+    // 4) DB 멱등 확보 + 점수 조인
     const items = [];
-    for (const p of places) {
+    for (const p of uniq) {
       const { restaurantId } = await ensureRestaurant({ place: p });
       const score = await getRestaurantScore(restaurantId);
       items.push({ restaurantId, ...p, score });
