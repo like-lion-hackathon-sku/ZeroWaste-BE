@@ -1,3 +1,4 @@
+// 위치: src/restaurants/router/restaurants.router.js
 import { Router } from "express";
 import {
   ensureRestaurantCtrl,
