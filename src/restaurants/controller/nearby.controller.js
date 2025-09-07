@@ -15,7 +15,7 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
     }
 
     // 1. 네이버 검색
-    const places = await searchLocal(q, 20);
+    const places = await searchLocal(q, 5);
 
     // 2. DB 멱등 등록 + 점수 조인
     const items = [];
