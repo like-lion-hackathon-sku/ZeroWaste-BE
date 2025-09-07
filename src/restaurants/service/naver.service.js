@@ -25,20 +25,54 @@ function normalizeName(s = "") {
     .trim();
 }
 
+/** 지점 토큰 제거/변형(수락산점, 본점, 강남점 → 수락산/강남/공백 등) */
+function generateBranchVariants(name = "") {
+  const base = String(name).trim();
+  if (!base) return [];
+
+  // 괄호 제거
+  let n = base.replace(/[()[\]]/g, " ");
+  const norm = normalizeName(n);
+
+  const set = new Set([base, norm]);
+
+  // '... 수락산점' → '... 수락산', '...'
+  const m = norm.match(/(.+?)\s*([가-힣A-Za-z0-9]+)\s*점$/);
+  if (m) {
+    const shop = m[1].trim();
+    const branch = m[2].trim();
+    set.add(`${shop} ${branch}`);
+    set.add(shop);
+  }
+
+  // 일반 지점 토큰 제거
+  set.add(
+    norm
+      .replace(/\b(본점|지점|분점|역점|역|센터|타워|몰|캠퍼스)\b/g, " ")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+
+  // 'OO O점' 광범위 제거
+  set.add(
+    norm
+      .replace(/\s*[가-힣A-Za-z0-9]+\s*점\b/g, "")
+      .replace(/\s+/g, " ")
+      .trim(),
+  );
+
+  return [...set].filter((s) => s && s.length >= 2);
+}
+
+/** &/앤/and 변형 포함 */
 function generateNameVariants(name = "") {
   const base = String(name).trim();
-
-  // 기초 정규화
   const norm = normalizeName(base);
-
-  // &/앤/and/앤드 치환 + 띄어쓰기 버전들
   const withAmp = norm.replace(/앤/gi, "&").replace(/\s*&\s*/g, "&");
   const withAndKo = norm.replace(/&/g, "앤");
   const withAndEn = norm.replace(/&/g, "and");
   const spaced1 = norm.replace(/(라운지)\s*(앤|&|and)\s*(바)/gi, "$1 $2 $3");
   const noSpace = norm.replace(/\s+/g, "");
-
-  // 중복 제거
   const set = new Set([
     base,
     norm,
@@ -47,22 +81,27 @@ function generateNameVariants(name = "") {
     withAndEn,
     spaced1,
     noSpace,
-    // ‘라운지바’로 붙여 쓰는 경우까지
     norm.replace(/라운지\s*바/gi, "라운지바"),
   ]);
-
-  // 너무 짧은/공백 문자열 제거
   return [...set].filter((s) => s && s.length >= 2);
 }
+
+/** 이름 전체 변형(지점 + &/앤/and) */
+function generateNameVariantsAll(name = "") {
+  const set = new Set();
+  for (const v of generateBranchVariants(name)) set.add(v);
+  for (const v of generateNameVariants(name)) set.add(v);
+  return [...set];
+}
+
 /** 주소 단순화: 광역/구/로/길만 남기고 번지/층/호수 제거 */
 function normalizeAddress(addr = "") {
   const s = String(addr)
     .replace(/\s+/g, " ")
     .replace(/\b(?:B\d+|지하\d*층|지상\d*층|[0-9]+동|[0-9]+호)\b/gi, "")
-    .replace(/\b(\d{1,4})(?:-\d{1,3})?\b/g, "") // 번지 제거
+    .replace(/\b(\d{1,4})(?:-\d{1,3})?\b/g, "")
     .replace(/[(),]/g, " ")
     .trim();
-  // 너무 짧아지면 원본도 같이 쓸 수 있게 둘 다 리턴
   return {
     short: s
       .replace(
@@ -74,6 +113,7 @@ function normalizeAddress(addr = "") {
     full: String(addr).trim(),
   };
 }
+
 function getHost(u = "") {
   try {
     return new URL(u).host.toLowerCase();
@@ -115,7 +155,6 @@ function extractPlaceIdFromUrl(url = "") {
 function extractPlaceIdFromHtml(html = "") {
   const s = String(html);
 
-  // canonical/og:url
   let m =
     s.match(
       /<link[^>]+rel=["']canonical["'][^>]+href=["'][^"']*(?:restaurant|place)\/(\d{4,})/i,
@@ -125,7 +164,6 @@ function extractPlaceIdFromHtml(html = "") {
     );
   if (m) return m[1];
 
-  // __NEXT_DATA__
   const nextMatch = s.match(/id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
   if (nextMatch) {
     try {
@@ -140,7 +178,6 @@ function extractPlaceIdFromHtml(html = "") {
     } catch {}
   }
 
-  // APOLLO STATE
   const apolloMatch = s.match(
     /window\.__APOLLO_STATE__\s*=\s*(.*?);\s*<\/script>/s,
   );
@@ -157,7 +194,6 @@ function extractPlaceIdFromHtml(html = "") {
     } catch {}
   }
 
-  // 일반 본문 내 URL/쿼리
   m =
     s.match(
       /https?:\/\/(?:pcmap|map)\.place\.naver\.com\/(?:restaurant|place)\/(\d{4,})/,
@@ -339,18 +375,19 @@ async function findPlaceIdByLocalApi(name, address) {
     "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
   };
 
-  // 주소를 두 형태로(축약/원본) 쿼리 조합
+  const nmCands = generateNameVariantsAll(name);
   const { short, full } = normalizeAddress(address || "");
-  const qCandidates = [
-    [normalizeName(name), full].filter(Boolean).join(" "),
-    [normalizeName(name), short].filter(Boolean).join(" "),
-    normalizeName(name),
-    short,
-  ].filter(Boolean);
 
-  for (const q of qCandidates) {
+  const tryQueries = [];
+  for (const nm of nmCands) {
+    tryQueries.push(nm);
+    if (full) tryQueries.push(`${nm} ${full}`);
+    if (short) tryQueries.push(`${nm} ${short}`);
+  }
+
+  for (const q of tryQueries) {
     const r = await axios.get(url, {
-      params: { query: q, display: 10 },
+      params: { query: q, display: 20 },
       headers,
       timeout: 7000,
       validateStatus: (s) => s >= 200 && s < 500,
@@ -408,17 +445,18 @@ async function findPlaceIdByWebSearch(name, address) {
     "site:place.naver.com",
   ];
 
+  const nmCands = generateNameVariantsAll(name).flatMap((nm) => [
+    nm,
+    `"${nm}"`,
+  ]);
   const { short, full } = normalizeAddress(address || "");
-  const baseNames = [normalizeName(name)];
-  if (name) baseNames.push(`"${normalizeName(name)}"`);
-
   const addrs = [];
   if (full) addrs.push(full, `"${full}"`);
   if (short) addrs.push(short, `"${short}"`);
 
   const queryCombos = [];
   for (const site of siteQueries) {
-    for (const nm of baseNames) {
+    for (const nm of nmCands) {
       if (addrs.length) {
         for (const ad of addrs) queryCombos.push([site, nm, ad].join(" "));
       }
@@ -427,16 +465,18 @@ async function findPlaceIdByWebSearch(name, address) {
   }
 
   const seen = new Set();
-  const uniqueQueries = queryCombos.filter((q) =>
-    seen.has(q) ? false : seen.add(q),
-  );
+  const uniqueQueries = queryCombos.filter((q) => {
+    if (seen.has(q)) return false;
+    seen.add(q);
+    return true;
+  });
 
   for (const q of uniqueQueries) {
     try {
       const r = await axios.get(
         "https://openapi.naver.com/v1/search/webkr.json",
         {
-          params: { query: q, display: 10 },
+          params: { query: q, display: 30 },
           headers,
           timeout: 7000,
           validateStatus: (s) => s >= 200 && s < 500,
@@ -451,10 +491,19 @@ async function findPlaceIdByWebSearch(name, address) {
 
       const items = r.data?.items ?? [];
       for (const it of items) {
-        const cand = it.link || it.url || it.description || "";
-        const id =
-          extractPlaceIdFromUrl(cand) || extractPlaceIdFromUrl(stripTags(cand));
-        if (id) return { id };
+        const fields = [
+          it.link,
+          it.url,
+          it.description,
+          it.title,
+          stripTags(it.link || ""),
+          stripTags(it.description || ""),
+          stripTags(it.title || ""),
+        ].filter(Boolean);
+        for (const f of fields) {
+          const id = extractPlaceIdFromUrl(f);
+          if (id) return { id };
+        }
       }
     } catch {}
   }
@@ -481,7 +530,6 @@ async function findPlaceIdByNaverMapSearch(name, address) {
     });
 
     const html = String(r.data || "");
-    // URL/스크립트 내에 흔히 보이는 placeId 패턴들
     let id =
       extractPlaceIdFromHtml(html) ||
       (html.match(/"placeId"\s*:\s*"(\d{4,})"/)?.[1] ?? null) ||
