@@ -8,10 +8,10 @@
  * @property {object} place - 외부 place payload
  * @property {string} place.name - 식당명 (필수)
  * @property {string} place.address - 주소 (필수)
- * @property {string} [place.category] - 카테고리 문자열(자동으로 enum 매핑됨)
- * @property {string} [place.telephone] - 전화번호(최대 15자, 없으면 빈 문자열)
- * @property {number} [place.mapx] - 좌표 X (nullable)
- * @property {number} [place.mapy] - 좌표 Y (nullable)
+ * @property {string} [place.category] - 카테고리 문자열
+ * @property {string} [place.telephone] - 전화번호
+ * @property {number} [place.mapx] - 좌표 X
+ * @property {number} [place.mapy] - 좌표 Y
  */
 
 /** Restaurant 멱등 확보 요청 DTO */
