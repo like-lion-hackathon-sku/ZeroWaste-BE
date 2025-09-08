@@ -59,8 +59,6 @@ export async function searchLocal(query, display = 5) {
   }));
 }
 
-import { searchLocal } from "./naver.service.js";
-
 export async function searchNearby({ q, page = 1, size = 20 }) {
   // 네이버 로컬검색은 start(1~)가 있으나, 현재 searchLocal 시그니처가 (query, display)만 지원하므로
   // 우선 display만 맞추고, 나중에 필요하면 start 파라미터를 추가하세요.
