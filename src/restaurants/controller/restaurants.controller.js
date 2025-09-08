@@ -2,7 +2,7 @@
 import { StatusCodes } from "http-status-codes";
 import {
   ensureRestaurant,
-  getRestaurantTabbedDetail, // ★ 이 함수 사용
+  getRestaurantTabbedDetail, // 탭형 상세 한 번에
 } from "../service/restaurants.service.js";
 
 /** PUT /api/restaurants  (멱등 확보) */
@@ -33,23 +33,21 @@ export const getRestaurantFullDetailCtrl = async (req, res, next) => {
     if (!Number.isInteger(restaurantId) || restaurantId <= 0) {
       return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     }
-
     const userId = req.user?.id ?? null;
+
     const payload = await getRestaurantTabbedDetail(restaurantId, userId);
 
-    if (typeof res.success === "function") {
-      return res.success(payload, StatusCodes.OK);
-    }
-    return res
-      .status(StatusCodes.OK)
-      .json({ resultType: "SUCCESS", error: null, success: payload });
+    return res.status(StatusCodes.OK).json({
+      resultType: "SUCCESS",
+      error: null,
+      success: payload,
+    });
   } catch (e) {
     next(e);
   }
 };
 
 /* ── (선택) DTO: 문서/Swagger용 ─────────────────────────────────── */
-
 export class EnsureRestaurantRequestDto {
   /** @param {{ restaurantId?:number, place?: {
    *   name:string, address:string, category?:string,

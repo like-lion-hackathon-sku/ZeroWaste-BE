@@ -6,6 +6,7 @@ import { getNaverMenusAndPhotos } from "./naver.service.js";
 function toFoodCategoryEnum(input) {
   const s = String(input || "").toLowerCase();
   const pairs = [
+    // 메인
     ["한식", "KOREAN"],
     ["korean", "KOREAN"],
     ["일식", "JAPANESE"],
@@ -15,6 +16,7 @@ function toFoodCategoryEnum(input) {
     ["양식", "WESTERN"],
     ["western", "WESTERN"],
     ["이탈리아", "WESTERN"],
+    // 패스트/분식/카페
     ["분식", "FASTFOOD"],
     ["패스트푸드", "FASTFOOD"],
     ["fastfood", "FASTFOOD"],
@@ -24,6 +26,7 @@ function toFoodCategoryEnum(input) {
     ["카페", "CAFE"],
     ["cafe", "CAFE"],
     ["커피", "CAFE"],
+    // 서브 카테고리 보강
     ["이자카야", "JAPANESE"],
     ["초밥", "JAPANESE"],
     ["스시", "JAPANESE"],
@@ -34,6 +37,7 @@ function toFoodCategoryEnum(input) {
 
 /* ===== 입력 정규화 ===== */
 function normalizeTel(t = "") {
+  // 숫자만 남기고 7자리 미만이면 무시
   const digits = String(t).replace(/\D+/g, "");
   return digits.length >= 7 ? digits : "";
 }
@@ -71,16 +75,17 @@ function normalizePlacePayload(place = {}) {
 export async function syncExternalPlace(placePayload) {
   const p = normalizePlacePayload(placePayload);
 
+  // 1) 전화번호 우선
   if (p.telephone) {
     const byTel = await restRepo.findByTelephone(p.telephone);
     if (byTel) return { restaurantId: byTel.id, created: false };
   }
 
+  // 2) 이름+주소(대소문자 무시) 매칭
   const byNA = await restRepo.findByNameAddress(p.name, p.address);
-  if (byNA) {
-    return { restaurantId: byNA.id, created: false };
-  }
+  if (byNA) return { restaurantId: byNA.id, created: false };
 
+  // 3) 신규 생성
   const created = await restRepo.create({ ...p, isSponsored: false });
   return { restaurantId: created.id, created: true };
 }
@@ -199,7 +204,7 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
       ecoScore: base.stats?.ecoScore ?? null,
       reviewCount: base.stats?.reviews ?? 0,
       isFavorite: favorite,
-      heroPhoto: external?.photos?.[0]?.url ?? null,
+      heroPhoto: external?.photos?.[0]?.url ?? null, // 상단 배너용
     },
     tabs: {
       info: {
@@ -216,8 +221,8 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
         sourcePlaceId: external?.placeId ?? null,
       },
       gallery: {
-        photos: (external?.photos ?? []).slice(0, 8),
-        dbPhotos: galleryPaged.items,
+        photos: (external?.photos ?? []).slice(0, 8), // 외부 8장 선반영
+        dbPhotos: galleryPaged.items, // DB 사진
         pageInfo: galleryPaged.pageInfo,
       },
       review: {
@@ -230,11 +235,4 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
       },
     },
   };
-}
-export async function findByTelephone(telephone) {
-  if (!telephone) return null;
-  return prisma.restaurants.findFirst({
-    where: { telephone },
-    select: { id: true, name: true, address: true, telephone: true },
-  });
 }
