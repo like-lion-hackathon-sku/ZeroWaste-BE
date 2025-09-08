@@ -17,7 +17,7 @@ function toNumberOrNull(v) {
 }
 
 /* ========================= 네이버 로컬 검색 ========================= */
-export async function searchLocal(query, display = 10) {
+export async function searchLocal(query, display = 5) {
   if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) {
     const err = new Error("NAVER_API_KEYS_MISSING");
     err.status = 500;
