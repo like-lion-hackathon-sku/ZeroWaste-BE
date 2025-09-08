@@ -236,3 +236,50 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
     },
   };
 }
+export async function getRestaurantFullDetail({ restaurant }) {
+  // DB + NAVER 병합
+  const db = await getRestaurantTabbedDetail(restaurant.id);
+  const ext = await buildExternalDetail({
+    name: restaurant.name,
+    address: restaurant.address,
+    telephone: restaurant.telephone,
+  });
+
+  return {
+    header: {
+      id: restaurant.id,
+      name: restaurant.name,
+      category: restaurant.category,
+      address: restaurant.address,
+      telephone: restaurant.telephone,
+      isFavorite: db.header?.isFavorite ?? false,
+      heroPhoto: ext.heroPhoto ?? db.header?.heroPhoto ?? null,
+      ecoScore: db.header?.ecoScore ?? null,
+    },
+    tabs: {
+      info: {
+        address: restaurant.address,
+        telephone: restaurant.telephone,
+        // 필요시 ext.place에서 도로명, 카테고리 보강
+        naverCategory: ext.place?.category ?? null,
+      },
+      stats: db.tabs?.stats ?? {
+        reviews: 0,
+        photos: 0,
+        avgLeftoverRatio: null,
+        ecoScore: null,
+      },
+      menu: ext.menu, // 메뉴 사진으로 대체
+      gallery: {
+        photos: ext.gallery.photos,
+        dbPhotos: db.tabs?.gallery?.dbPhotos ?? [],
+        pageInfo: ext.gallery.pageInfo,
+      },
+      review: db.tabs?.review ?? {
+        summary: { total: 0, avgEcoScore: null },
+        items: [],
+        pageInfo: { page: 1, size: 5, total: 0 },
+      },
+    },
+  };
+}

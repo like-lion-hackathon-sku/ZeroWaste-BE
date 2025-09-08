@@ -1,7 +1,10 @@
 // 위치: src/restaurants/controller/nearby.controller.js
 import { StatusCodes } from "http-status-codes";
 import { searchLocal } from "../service/naver.service.js";
-import { ensureRestaurant } from "../service/restaurants.service.js";
+import {
+  ensureRestaurant,
+  getRestaurantFullDetail,
+} from "../service/restaurants.service.js";
 import { getRestaurantScore } from "../service/score.service.js";
 
 const RESTAURANT_CATS = [
@@ -57,18 +60,19 @@ function isRestaurantCategory(cat = "") {
   );
 }
 
+/** GET /api/restaurants/nearby */
 export const getNearbyRestaurantsCtrl = async (req, res, next) => {
   try {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: "QUERY_REQUIRED" });
 
-    // 1) 네이버 검색 (필요시 개수 조절)
+    // 1) 네이버 검색
     const places = await searchLocal(q, 5);
 
     // 2) 식당/카페 등만 통과
     const filtered = places.filter((p) => isRestaurantCategory(p?.category));
 
-    // 3) 이름+주소 기준 중복 제거 (네이버가 같은 항목을 중복 반환하는 경우 방지)
+    // 3) 이름+주소 기준 중복 제거
     const uniq = [];
     const seen = new Set();
     for (const p of filtered) {
@@ -91,6 +95,19 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
       error: null,
       success: { items },
     });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** GET /api/restaurants/:restaurantId/detail */
+export const getRestaurantFullDetailCtrl = async (req, res, next) => {
+  try {
+    const restaurantId = Number(req.params.restaurantId);
+    // 필요 시 ensure: id가 있으면 해당 레코드 확보(없으면 생성 or 404 정책 선택)
+    const restaurant = await ensureRestaurant({ restaurantId });
+    const payload = await getRestaurantFullDetail({ restaurant });
+    return res.json({ resultType: "SUCCESS", error: null, success: payload });
   } catch (e) {
     next(e);
   }
