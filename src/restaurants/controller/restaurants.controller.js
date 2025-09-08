@@ -1,9 +1,7 @@
-// 위치: src/restaurants/controller/restaurants.controller.js
 import { StatusCodes } from "http-status-codes";
 import {
   ensureRestaurant,
   getRestaurantDetail,
-  getRestaurantExternalDetail,
 } from "../service/restaurants.service.js";
 
 /** PUT /api/restaurants  (멱등 확보) */
@@ -14,6 +12,7 @@ export const ensureRestaurantCtrl = async (req, res, next) => {
 
     if (typeof res.success === "function")
       return res.success(result, StatusCodes.OK);
+
     return res
       .status(StatusCodes.OK)
       .json({ resultType: "SUCCESS", error: null, success: result });
@@ -22,8 +21,8 @@ export const ensureRestaurantCtrl = async (req, res, next) => {
   }
 };
 
-/** GET /api/restaurants/:restaurantId/detail (DB + 네이버 통합 상세조회) */
-export const getRestaurantFullDetailCtrl = async (req, res, next) => {
+/** GET /api/restaurants/:restaurantId/detail  (DB 상세만 반환) */
+export const getRestaurantDetailCtrl = async (req, res, next) => {
   try {
     const restaurantId = Number(req.params.restaurantId);
     if (!Number.isInteger(restaurantId) || restaurantId <= 0) {
@@ -31,23 +30,31 @@ export const getRestaurantFullDetailCtrl = async (req, res, next) => {
     }
 
     const userId = req.user?.id ?? null;
-
-    // 1. DB 상세 조회
     const dbDetail = await getRestaurantDetail(restaurantId, userId);
 
-    // 2. 네이버 외부 상세 조회
-    const external = await getRestaurantExternalDetail(restaurantId);
-
-    // 3. 합쳐서 반환
     return res.status(StatusCodes.OK).json({
       resultType: "SUCCESS",
       error: null,
-      success: {
-        ...dbDetail,
-        external, // 네이버 메뉴/사진 포함
-      },
+      success: dbDetail, // external 제거
     });
   } catch (e) {
     next(e);
   }
 };
+
+/* ===================== DTO ===================== */
+export class EnsureRestaurantRequestDto {
+  /** @param {{restaurantId?:number, place?:object}} body */
+  constructor(body) {
+    this.restaurantId = body?.restaurantId ?? null;
+    this.place = body?.place ?? null;
+  }
+}
+
+export class EnsureRestaurantResponseDto {
+  /** @param {{ restaurantId:number, created:boolean }} result */
+  constructor(result) {
+    this.restaurantId = result.restaurantId;
+    this.created = result.created;
+  }
+}
