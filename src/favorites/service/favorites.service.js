@@ -3,9 +3,10 @@ import * as restSvc from "../../restaurants/service/restaurants.service.js";
 import * as restRepo from "../../restaurants/repository/restaurants.repository.js";
 
 /**
- * 즐겨찾기 추가 (단일 엔트리)
- * - place 로 동기화된 restaurantId가 기존 즐겨찾기의 동일 상호/주소와 다르면
- *   👉 기존 즐겨찾기를 새 restaurantId 로 "재할당" 한다(merge).
+ * 즐겨찾기 추가(멱등)
+ * - restaurantId가 있으면 바로 즐겨찾기 추가
+ * - 없으면 place로 내부 식당 ensure 후 즐겨찾기 추가
+ * - 동일 이름/주소 즐겨찾기가 다른 restaurantId를 가리키면 재할당
  */
 export async function addFavorite({ userId, restaurantId, place }) {
   if (restaurantId == null && !place) {
@@ -25,26 +26,28 @@ export async function addFavorite({ userId, restaurantId, place }) {
         err.status = 404;
         throw err;
       }
-      // 아래 place 흐름으로 이어짐
+      // place 흐름으로 이어짐
     } else {
       const created = await favRepo.ensureFavorite(userId, finalRestaurantId);
       return { restaurantId: finalRestaurantId, created };
     }
   }
 
-  // 2) place 로 내부 식당 동기화
+  // 2) place 로 내부 식당 ensure
   if (!place) {
     const err = new Error("PLACE_PAYLOAD_REQUIRED");
     err.status = 400;
     throw err;
   }
 
-  const { restaurantId: syncedRestaurantId } =
-    await restSvc.syncExternalPlace(place);
+  // ✔ 변경점: syncExternalPlace -> ensureRestaurant 사용
+  // ensureRestaurant는 Prisma restaurants 레코드를 반환하므로 id를 꺼내 쓴다.
+  const ensured = await restSvc.ensureRestaurant({ place });
+  const syncedRestaurantId = ensured.id;
 
   finalRestaurantId = syncedRestaurantId;
 
-  // 3) ✅ 동일 이름/주소의 기존 즐겨찾기가 다른 restaurantId 를 가리키면 재할당
+  // 3) 동일 이름/주소 즐겨찾기가 다른 restaurantId를 가리키면 재할당
   const sameFav = await favRepo.findUserFavoriteByNameAddress(
     userId,
     place.name,
@@ -57,13 +60,9 @@ export async function addFavorite({ userId, restaurantId, place }) {
       sameFav.restaurantId,
       finalRestaurantId,
     );
-    // 재할당이 0이면(동시에 생성되는 등) 멱등 추가 시도
     if (!moved) {
       const created = await favRepo.ensureFavorite(userId, finalRestaurantId);
-      return {
-        restaurantId: finalRestaurantId,
-        created,
-      };
+      return { restaurantId: finalRestaurantId, created };
     }
     return {
       restaurantId: finalRestaurantId,
@@ -77,12 +76,10 @@ export async function addFavorite({ userId, restaurantId, place }) {
   return { restaurantId: finalRestaurantId, created };
 }
 
-/** 즐겨찾기 삭제 */
 export async function removeFavorite(userId, restaurantId) {
   await favRepo.deleteFavorite(userId, restaurantId);
 }
 
-/** 즐겨찾기 목록 */
 export async function listMyFavorites(userId, q) {
   return favRepo.findByUser(userId, q);
 }

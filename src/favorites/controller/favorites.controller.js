@@ -6,7 +6,7 @@ import {
 } from "../service/favorites.service.js";
 import { StatusCodes } from "http-status-codes";
 
-/** 즐겨찾기 목록 */
+// 즐겨찾기 조회 컨트롤러
 export const listMyFavoritesCtrl = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -30,7 +30,7 @@ export const listMyFavoritesCtrl = async (req, res, next) => {
   }
 };
 
-/** 즐겨찾기 추가(멱등) */
+// 즐겨찾기 추가 컨트롤러
 export const upsertFavorite = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -48,7 +48,7 @@ export const upsertFavorite = async (req, res, next) => {
   }
 };
 
-/** 즐겨찾기 삭제 */
+// 즐겨찾기 삭제 컨트롤러
 export const removeFavoriteById = async (req, res, next) => {
   try {
     const userId = req.user.id;
