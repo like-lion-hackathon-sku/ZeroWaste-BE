@@ -256,7 +256,7 @@ export const RESTAURANT_CATS = [
   ]),
 ];
 
-// 명확 제외(블랙리스트): 음식점 아님
+// 블렉 리스트: 음식점 아닌 장소들
 const RESTAURANT_BLACK = [
   "병원",
   "의원",
