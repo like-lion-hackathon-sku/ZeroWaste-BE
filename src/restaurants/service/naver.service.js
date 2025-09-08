@@ -1,379 +1,145 @@
-// 위치: src/restaurants/service/naver.service.js
+// src/restaurants/service/naver.service.js
 import "dotenv/config";
 import axios from "axios";
 
-/* ========================= 기본 설정/로그 ========================= */
-const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID ?? "";
-const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET ?? "";
+const NAVER_ID = process.env.NAVER_CLIENT_ID ?? "";
+const NAVER_SECRET = process.env.NAVER_CLIENT_SECRET ?? "";
 
-const dlog = (...args) => {
-  if (process.env.DEBUG_NAVER === "1") console.log(...args);
-};
+const client = axios.create({
+  headers: {
+    "X-Naver-Client-Id": NAVER_ID,
+    "X-Naver-Client-Secret": NAVER_SECRET,
+  },
+  timeout: 5000,
+});
 
-/* ========================= 유틸 ========================= */
-function stripTags(s = "") {
-  return String(s).replace(/<[^>]*>/g, "");
-}
-function toNumberOrNull(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-function normalizeName(s = "") {
-  return String(s).replace(/\s+/g, " ").trim();
-}
-function isNaverPlaceLink(url = "") {
-  try {
-    const host = new URL(url).host.toLowerCase();
-    return (
-      host === "pcmap.place.naver.com" ||
-      host === "place.naver.com" ||
-      host === "m.place.naver.com" ||
-      host === "map.place.naver.com"
-    );
-  } catch {
-    return false;
-  }
-}
+/** 태그 제거 */
+const stripTags = (s = "") => String(s).replace(/<[^>]*>/g, "");
 
-/** URL/쿼리/본문에서 placeId 추출 (짧은 버전) */
-function extractPlaceIdFromUrl(url = "") {
-  if (!url) return null;
-  try {
-    const u = new URL(url);
-    for (const key of ["placeId", "poiId", "id", "code"]) {
-      const v = u.searchParams.get(key);
-      if (v && /^\d{4,}$/.test(v)) return v;
-    }
-  } catch {}
-  const m =
-    String(url).match(
-      /(?:entry\/place|restaurant|place)\/(\d{4,})(?=[/?#\s"']|$)/,
-    ) || String(url).match(/(?:placeId|poiId|id|code)=(\d{4,})/);
-  return m ? m[1] : null;
-}
+/** 1) 네이버 로컬 검색: 이름+주소(또는 전화)로 place 후보 식별 */
+export async function naverLocalSearch({ name, address, telephone }) {
+  const q = telephone
+    ? `${name} ${telephone}`
+    : `${name} ${address ?? ""}`.trim();
 
-function extractPlaceIdFromHtml(html = "") {
-  const s = String(html);
-  let m =
-    s.match(
-      /<link[^>]+rel=["']canonical["'][^>]+href=["'][^"']*(?:restaurant|place)\/(\d{4,})/i,
-    ) ||
-    s.match(
-      /<meta[^>]+property=["']og:url["'][^>]+content=["'][^"']*(?:restaurant|place)\/(\d{4,})/i,
-    );
-  if (m) return m[1];
+  const { data } = await client.get(
+    "https://openapi.naver.com/v1/search/local.json",
+    { params: { query: q, display: 5 } },
+  );
 
-  const next = s.match(/id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
-  if (next) {
-    try {
-      const str = next[1];
-      const id =
-        str.match(/(?:restaurant|place)\/(\d{4,})/) ||
-        str.match(/"placeId"\s*:\s*"(\d{4,})"/) ||
-        str.match(/"poiId"\s*:\s*(\d{4,})/);
-      if (id) return id[1];
-    } catch {}
-  }
-
-  const ap = s.match(/window\.__APOLLO_STATE__\s*=\s*(.*?);\s*<\/script>/s);
-  if (ap) {
-    try {
-      const str = ap[1];
-      const id =
-        str.match(/(?:restaurant|place)\/(\d{4,})/) ||
-        str.match(/"placeId"\s*:\s*"(\d{4,})"/) ||
-        str.match(/"poiId"\s*:\s*(\d{4,})/);
-      if (id) return id[1];
-    } catch {}
-  }
-
-  const fromBody =
-    s.match(
-      /https?:\/\/(?:pcmap|map)\.place\.naver\.com\/(?:restaurant|place)\/(\d{4,})/,
-    ) ||
-    s.match(/(?:entry\/place|restaurant|place)\/(\d{4,})(?=[/?#\s"'])/) ||
-    s.match(/(?:placeId|poiId|id|code)=(\d{4,})/);
-  return fromBody ? fromBody[1] : null;
-}
-
-/* ========================= 네이버 로컬 검색 ========================= */
-export async function searchLocal(query, display = 10) {
-  if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) {
-    const err = new Error("NAVER_API_KEYS_MISSING");
-    err.status = 500;
-    throw err;
-  }
-
-  const url = "https://openapi.naver.com/v1/search/local.json";
-  const res = await axios.get(url, {
-    params: { query, display },
-    headers: {
-      "X-Naver-Client-Id": NAVER_CLIENT_ID,
-      "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-    },
-    timeout: 7000,
-    validateStatus: (s) => s >= 200 && s < 500,
-  });
-
-  dlog("[NAVER][LOCAL-RES]", {
-    status: res.status,
-    len: res.data?.items?.length ?? 0,
-    errorMessage: res.data?.errorMessage ?? res.data?.message ?? null,
-  });
-
-  if (res.status >= 400) {
-    const err = new Error(`NAVER_LOCAL_SEARCH_FAILED(${res.status})`);
-    err.status = res.status;
-    err.data = res.data;
-    throw err;
-  }
-
-  return (res.data?.items ?? []).map((item) => ({
-    name: stripTags(item.title),
-    category: item.category ?? "",
-    address: item.roadAddress || item.address || "",
-    telephone: item.telephone || "",
-    mapx: toNumberOrNull(item.mapx),
-    mapy: toNumberOrNull(item.mapy),
-    link: item.link ?? "",
+  const items = (data?.items ?? []).map((it) => ({
+    title: stripTags(it.title),
+    category: stripTags(it.category),
+    address: stripTags(it.address || it.roadAddress),
+    mapx: Number(it.mapx) || null,
+    mapy: Number(it.mapy) || null,
+    link: it.link, // place.naver.com으로 가는 링크(식별에 활용)
+    telephone: stripTags(it.telephone || ""),
   }));
+  return items;
 }
 
-/* ============ placeId 탐색 ============ */
-/** 링크를 실제로 열어 최종 URL/HTML에서 placeId 추출 (간소화) */
-async function resolvePlaceIdFromLink(link) {
-  if (!link) return null;
-  const opts = {
-    timeout: 8000,
-    maxRedirects: 5,
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36",
-      "Accept-Language": "ko-KR,ko;q=0.9",
-      Referer: "https://map.naver.com/",
-      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    },
-    validateStatus: (s) => (s >= 200 && s < 400) || s === 404,
-  };
+/** 2) 네이버 이미지 검색: 사진/메뉴 사진 추출 */
+export async function naverImageSearch({ name, address }) {
+  // 메뉴/음식 위주 사진을 뽑고 싶으면 키워드 가중
+  const baseQuery = `${name} ${address ?? ""}`.trim();
+  const candidates = [
+    baseQuery,
+    `${baseQuery} 메뉴`,
+    `${name} 메뉴`,
+    `${name} 내부`,
+  ];
 
-  try {
-    // HEAD로 최종 URL만 확인
-    try {
-      const h = await axios.head(link, opts);
-      const final1 = h?.request?.res?.responseUrl ?? h?.request?.path ?? link;
-      const id1 = extractPlaceIdFromUrl(final1);
-      if (id1) return id1;
-    } catch {}
+  // 간단히 2회만 호출 (너무 많이 부르면 쿼터 소모↑)
+  const queries = candidates.slice(0, 2);
 
-    // GET으로 HTML 수집 → 본문/최종URL에서 재시도
-    const r = await axios.get(link, opts);
-    const finalUrl = r?.request?.res?.responseUrl ?? r?.request?.path ?? link;
-    let id = extractPlaceIdFromUrl(finalUrl);
-    if (id) return id;
-
-    id = extractPlaceIdFromHtml(String(r.data || ""));
-    if (id) return id;
-  } catch {}
-  return null;
-}
-
-/** Local API로 2회만 시도: "이름 주소", "이름" */
-async function findPlaceIdByLocalApi(name, address) {
-  const url = "https://openapi.naver.com/v1/search/local.json";
-  const headers = {
-    "X-Naver-Client-Id": NAVER_CLIENT_ID,
-    "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-  };
-  const qList = [
-    [normalizeName(name), normalizeName(address)].filter(Boolean).join(" "),
-    normalizeName(name),
-  ].filter(Boolean);
-
-  for (const q of qList) {
-    const r = await axios.get(url, {
-      params: { query: q, display: 10 },
-      headers,
-      timeout: 7000,
-      validateStatus: (s) => s >= 200 && s < 500,
-    });
-    if (r.status >= 400) continue;
-
-    for (const item of r.data?.items ?? []) {
-      const link = item.link || "";
-      if (!isNaverPlaceLink(link)) continue;
-      let id = extractPlaceIdFromUrl(link);
-      if (!id) id = await resolvePlaceIdFromLink(link);
-      if (id) {
-        dlog("[NAVER][PLACE-ID-HIT]", { q, id });
-        return {
-          id,
-          fixedName: stripTags(item.title),
-          fixedAddr: item.roadAddress || item.address || "",
-        };
-      }
-    }
-  }
-  return null;
-}
-
-/** WebKR으로 1회만 시도: site:pcmap.place.naver.com "이름" "주소" */
-async function findPlaceIdByWebSearch(name, address) {
-  const headers = {
-    "X-Naver-Client-Id": NAVER_CLIENT_ID,
-    "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-  };
-  const nm = normalizeName(name);
-  const ad = normalizeName(address);
-  if (!nm) return null;
-
-  const q = ["site:pcmap.place.naver.com", `"${nm}"`, ad ? `"${ad}"` : ""]
-    .filter(Boolean)
-    .join(" ");
-
-  try {
-    const r = await axios.get(
-      "https://openapi.naver.com/v1/search/webkr.json",
-      {
-        params: { query: q, display: 5 },
-        headers,
-        timeout: 7000,
-        validateStatus: (s) => s >= 200 && s < 500,
-      },
+  const all = [];
+  for (const q of queries) {
+    const { data } = await client.get(
+      "https://openapi.naver.com/v1/search/image",
+      { params: { query: q, display: 10, sort: "sim" } },
     );
-    dlog("[NAVER][WEBKR-STATUS]", {
-      q,
-      status: r.status,
-      len: r.data?.items?.length ?? 0,
-    });
-    if (r.status >= 400) return null;
-
-    for (const it of r.data?.items ?? []) {
-      const cand = it.link || it.url || it.description || it.title || "";
-      const id =
-        extractPlaceIdFromUrl(cand) || extractPlaceIdFromUrl(stripTags(cand));
-      if (id) return { id };
-    }
-  } catch {}
-  return null;
-}
-
-/* ========================= 외부 상세(메뉴/사진) ========================= */
-function parseMenusAndPhotosFromHTML(html) {
-  let menus = [];
-  let photos = [];
-  let telephone = "";
-  let address = "";
-  let category = "";
-
-  const tryJson = (raw) => {
-    try {
-      const j = JSON.parse(raw);
-      const walk = (n) => {
-        if (!n) return;
-        if (Array.isArray(n)) return n.forEach(walk);
-        if (typeof n === "object") {
-          if (!telephone && typeof n.phone === "string") telephone = n.phone;
-          if (!address && typeof n.address === "string") address = n.address;
-          if (!category && (n.category || n.categoryName))
-            category = n.category || n.categoryName;
-
-          if (Array.isArray(n.menus)) menus.push(...n.menus);
-          if (Array.isArray(n.menuList)) menus.push(...n.menuList);
-          if (n.menu?.items && Array.isArray(n.menu.items))
-            menus.push(...n.menu.items);
-
-          if (Array.isArray(n.photos)) photos.push(...n.photos);
-          if (Array.isArray(n.images)) photos.push(...n.images);
-          if (n.photo?.items && Array.isArray(n.photo.items))
-            photos.push(...n.photo.items);
-
-          for (const v of Object.values(n)) walk(v);
-        }
-      };
-      walk(j);
-    } catch {}
-  };
-
-  const s = String(html || "");
-  const next = s.match(/id="__NEXT_DATA__"[^>]*>(.*?)<\/script>/s);
-  if (next) tryJson(next[1]);
-  if (!menus.length && !photos.length) {
-    const ap = s.match(/window\.__APOLLO_STATE__\s*=\s*(.*?);\s*<\/script>/s);
-    if (ap) tryJson(ap[1]);
-  }
-
-  menus = menus
-    .map((m) => {
-      const name = m?.name ?? m?.menuName ?? m?.title;
-      const price = m?.priceString ?? m?.price ?? m?.cost ?? null;
-      return name ? { name, price } : null;
-    })
-    .filter(Boolean);
-
-  photos = photos
-    .map((p) => {
-      const url = p?.url ?? p?.imageUrl;
-      return url ? { url } : null;
-    })
-    .filter(Boolean);
-
-  return { menus, photos, telephone, address, category };
-}
-
-/** 공개 함수: 메뉴/사진 가져오기 */
-export async function getNaverMenusAndPhotos({ placeId, name, address } = {}) {
-  if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) {
-    const err = new Error("NAVER_API_KEYS_MISSING");
-    err.status = 500;
-    throw err;
-  }
-
-  // 1) placeId 없으면 최소 시도로 찾아본다
-  if (!placeId) {
-    let hit = await findPlaceIdByLocalApi(name, address);
-    if (!hit) hit = await findPlaceIdByWebSearch(name, address);
-
-    if (!hit) {
-      dlog("[NAVER][PLACEID-NOT-FOUND]", { name, address });
-      return {
-        placeId: null,
-        name,
-        address,
-        menus: [],
-        photos: [],
-        telephone: "",
-        category: "",
-      };
-    }
-    placeId = hit.id;
-    name = name ?? hit.fixedName;
-    address = address ?? hit.fixedAddr;
-  }
-
-  // 2) 상세 HTML (restaurant → place 1회 재시도)
-  const fetchHtml = async (kind) =>
-    axios.get(`https://pcmap.place.naver.com/${kind}/${placeId}/home`, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X)",
-        "Accept-Language": "ko-KR,ko;q=0.9",
+    const imgs = (data?.items ?? []).map((it) => ({
+      title: stripTags(it.title),
+      thumbnail: it.thumbnail || it.thumbnailUrl || it.link,
+      link: it.link,
+      size: {
+        width: it.sizewidth ? Number(it.sizewidth) : null,
+        height: it.sizeheight ? Number(it.sizeheight) : null,
       },
-      timeout: 8000,
-      validateStatus: (s) => s >= 200 && s < 500,
-    });
-
-  let hRes = await fetchHtml("restaurant");
-  if (hRes.status >= 400) {
-    dlog("[NAVER][RESTAURANT-FAIL]", hRes.status);
-    const alt = await fetchHtml("place");
-    if (alt.status < 400) hRes = alt;
-  }
-  if (hRes.status >= 400) {
-    const err = new Error(`NAVER_PLACE_PAGE_FAILED(${hRes.status})`);
-    err.status = hRes.status;
-    throw err;
+    }));
+    all.push(...imgs);
   }
 
-  // 3) 파싱
-  const parsed = parseMenusAndPhotosFromHTML(hRes.data);
-  return { placeId, name, address, ...parsed };
+  // 중복 제거(링크 기준)
+  const uniq = [];
+  const seen = new Set();
+  for (const im of all) {
+    if (seen.has(im.link)) continue;
+    seen.add(im.link);
+    uniq.push(im);
+  }
+  return uniq;
 }
+
+/** 3) 외부 상세 조립: heroPhoto, gallery, (menu는 '메뉴 사진'으로 대체) */
+export async function buildExternalDetail({ name, address, telephone }) {
+  const [locals, images] = await Promise.all([
+    naverLocalSearch({ name, address, telephone }),
+    naverImageSearch({ name, address }),
+  ]);
+
+  const heroPhoto = images[0]?.link ?? null;
+
+  // 메뉴 사진만 별도로 뽑고 싶으면 간단 필터 (제목에 '메뉴' 포함 등)
+  const menuPhotos = images.filter((im) => /메뉴|menu/i.test(im.title));
+
+  return {
+    place: locals[0] ?? null, // 가장 유사한 후보 1개
+    heroPhoto,
+    gallery: {
+      photos: images,
+      pageInfo: { page: 1, size: images.length, total: images.length },
+    },
+    // 구조화된 항목이 없으므로 'items'가 아니라 'menuPhotos'로 제공
+    menu: {
+      items: [], // 구조화 불가 → 빈 배열
+      photos: menuPhotos, // 메뉴 사진으로 대체
+    },
+  };
+}
+export async function getNaverMenusAndPhotos({ name, address, telephone }) {
+  // 이름·주소 기반으로 이미지 검색해서
+  // 메뉴/갤러리 사진 묶음을 반환
+  const base = [`${name} ${address ?? ""}`.trim(), `${name} 메뉴`];
+
+  const all = [];
+  for (const q of base) {
+    const { data } = await client.get(
+      "https://openapi.naver.com/v1/search/image",
+      { params: { query: q, display: 10, sort: "sim" } },
+    );
+    const imgs = (data?.items ?? []).map((it) => ({
+      title: stripTags(it.title),
+      link: it.link,
+      thumbnail: it.thumbnail || it.thumbnailUrl || it.link,
+    }));
+    all.push(...imgs);
+  }
+
+  // 중복 제거
+  const seen = new Set();
+  const photos = all.filter((im) =>
+    seen.has(im.link) ? false : (seen.add(im.link), true),
+  );
+
+  // 제목에 '메뉴' 포함한 것만 메뉴 사진으로 분류
+  const menuPhotos = photos.filter((im) => /메뉴|menu/i.test(im.title));
+
+  return {
+    heroPhoto: photos[0]?.link ?? null,
+    menuPhotos,
+    galleryPhotos: photos,
+  };
+}
+export { naverLocalSearch as searchLocal };
