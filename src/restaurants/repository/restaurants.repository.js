@@ -110,3 +110,93 @@ export async function isFavorite(userId, restaurantsId) {
   });
   return !!found;
 }
+export async function findRecentReviewsWithPhotos(
+  restaurantId,
+  { page = 1, size = 10 } = {},
+) {
+  const id = Number(restaurantId);
+  const safePage = Number.isFinite(+page) && +page > 0 ? +page : 1;
+  const safeSizeRaw = Number.isFinite(+size) && +size > 0 ? +size : 10;
+  const take = Math.min(Math.max(safeSizeRaw, 1), 30);
+  const skip = (safePage - 1) * take;
+
+  const [total, rows] = await Promise.all([
+    prisma.reviews.count({ where: { restaurantsId: id } }),
+    prisma.reviews.findMany({
+      where: { restaurantsId: id },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+      include: {
+        reviewPhotos: {
+          select: {
+            id: true,
+            imageName: true,
+            leftoverRatio: true,
+            createdAt: true,
+          },
+          orderBy: { id: "desc" },
+        },
+        user: { select: { id: true, nickname: true, profile: true } },
+      },
+    }),
+  ]);
+
+  const items = rows.map((r) => ({
+    reviewId: r.id,
+    createdAt: r.createdAt,
+    user: {
+      id: r.user?.id,
+      nickname: r.user?.nickname,
+      profile: r.user?.profile,
+    },
+    photos:
+      r.reviewPhotos?.map((p) => ({
+        id: p.id,
+        imageName: p.imageName,
+        leftoverRatio: p.leftoverRatio,
+        createdAt: p.createdAt,
+      })) ?? [],
+  }));
+
+  return { items, pageInfo: { page: safePage, size: take, total } };
+}
+
+/** 갤러리(사진) 모아보기 – 사진만 평면으로 페이징 */
+export async function findGalleryPhotos(
+  restaurantId,
+  { page = 1, size = 12 } = {},
+) {
+  const id = Number(restaurantId);
+  const safePage = Number.isFinite(+page) && +page > 0 ? +page : 1;
+  const safeSizeRaw = Number.isFinite(+size) && +size > 0 ? +size : 12;
+  const take = Math.min(Math.max(safeSizeRaw, 1), 60);
+  const skip = (safePage - 1) * take;
+
+  const [total, rows] = await Promise.all([
+    prisma.reviewPhotos.count({ where: { reviews: { restaurantsId: id } } }),
+    prisma.reviewPhotos.findMany({
+      where: { reviews: { restaurantsId: id } },
+      orderBy: { id: "desc" },
+      skip,
+      take,
+      select: {
+        id: true,
+        imageName: true,
+        leftoverRatio: true,
+        createdAt: true,
+        reviewId: true,
+      },
+    }),
+  ]);
+
+  const items = rows.map((p) => ({
+    id: p.id,
+    imageName: p.imageName,
+    leftoverRatio: p.leftoverRatio,
+    createdAt: p.createdAt,
+    reviewId: p.reviewId,
+  }));
+
+  return { items, pageInfo: { page: safePage, size: take, total } };
+}
