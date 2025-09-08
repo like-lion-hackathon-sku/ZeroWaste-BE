@@ -5,7 +5,10 @@ import {
   removeFavoriteById,
   listMyFavoritesCtrl,
 } from "../controller/favorites.controller.js";
-import { authenticateAccessToken } from "../../auth/middleware/auth.middleware.js";
+import {
+  authenticateAccessToken,
+  verifyUserIsActive,
+} from "../../auth/middleware/auth.middleware.js";
 
 const r = Router();
 
@@ -28,6 +31,7 @@ function requireAuth(req, res, next) {
 r.use(authenticateAccessToken);
 /* ───────── 미들웨어 ───────── */
 r.use(requireAuth);
+r.use(verifyUserIsActive);
 
 /* ───────── 라우트 ───────── */
 
