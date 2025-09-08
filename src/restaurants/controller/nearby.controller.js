@@ -343,36 +343,59 @@ export function isRestaurantCategory(cat = "", name = "") {
   );
 }
 
-export const getNearbyRestaurantsCtrl = async (req, res, next) => {
+export const getNearbyRestaurantsCtrl = async (req, res, _next) => {
   try {
-    const { q } = req.query;
-    if (!q) return res.status(400).json({ error: "QUERY_REQUIRED" });
+    const qRaw = req.query.q;
+    const q = typeof qRaw === "string" ? qRaw.trim() : "";
+    const size = Number(req.query.size) > 0 ? Number(req.query.size) : 10;
 
-    // 1) 네이버 검색 (필요시 개수 조절)
-    const places = await searchLocal(q, 10);
+    if (!q) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        resultType: "FAIL",
+        error: { code: "QUERY_REQUIRED" },
+        success: null,
+      });
+    }
 
-    // 2) 식당/카페 등만 통과
+    // 1) 네이버 검색 (실패해도 빈 배열로 복구)
+    let places = [];
+    try {
+      places = await searchLocal(q, size);
+    } catch (e) {
+      console.error("[NEARBY][NAVER_FAIL]", e?.status, e?.message);
+      places = [];
+    }
+
+    // 2) 카테고리 필터
     const filtered = places.filter((p) =>
       isRestaurantCategory(p?.category, p?.name),
     );
 
-    // 3) 이름+주소 기준 중복 제거 (네이버가 같은 항목을 중복 반환하는 경우 방지)
+    // 3) 이름+주소 중복 제거
     const uniq = [];
     const seen = new Set();
     for (const p of filtered) {
-      const key = `${p.name}__${p.address}`;
+      const key = `${(p?.name ?? "").trim()}__${(p?.address ?? "").trim()}`;
       if (seen.has(key)) continue;
       seen.add(key);
       uniq.push(p);
     }
 
-    // 4) DB 멱등 확보 + 점수 조인
-    const items = [];
-    for (const p of uniq) {
-      const { restaurantId } = await ensureRestaurant({ place: p });
-      const score = await getRestaurantScore(restaurantId);
-      items.push({ restaurantId, ...p, score });
-    }
+    // 4) DB 멱등 + 점수 조회 (동시 처리)
+    const items = await Promise.all(
+      uniq.map(async (p) => {
+        try {
+          const ensured = await ensureRestaurant({ place: p });
+          const rid = ensured?.restaurantId ?? ensured?.id; // 어느 필드가 와도 대응
+          const score = rid ? await getRestaurantScore(rid) : null;
+          return { restaurantId: rid ?? null, ...p, score };
+        } catch (e) {
+          console.error("[NEARBY][ENSURE/SCORE_FAIL]", e?.message);
+          // 한 항목 실패해도 나머지 진행
+          return { restaurantId: null, ...p, score: null };
+        }
+      }),
+    );
 
     return res.status(StatusCodes.OK).json({
       resultType: "SUCCESS",
@@ -380,6 +403,12 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
       success: { items },
     });
   } catch (e) {
-    next(e);
+    console.error("[NEARBY][UNCAUGHT]", e);
+    // 최후 방어선: 200 + 빈 결과
+    return res.status(StatusCodes.OK).json({
+      resultType: "SUCCESS",
+      error: null,
+      success: { items: [] },
+    });
   }
 };
