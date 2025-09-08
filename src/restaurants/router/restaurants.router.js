@@ -9,8 +9,6 @@ import { getNearbyRestaurantsCtrl } from "../controller/nearby.controller.js";
 const r = Router();
 
 r.get("/nearby", getNearbyRestaurantsCtrl);
-r.get("/:restaurantId/detail", getRestaurantFullDetailCtrl); // OK
-r.get("/:restaurantId", getRestaurantFullDetailCtrl); // (원한다면 유지/제거 선택)
+r.get("/:restaurantId/detail", getRestaurantFullDetailCtrl);
 r.put("/", ensureRestaurantCtrl);
-
 export default r;
