@@ -1,35 +1,35 @@
 // 위치: src/restaurants/service/restaurants.service.js
 import * as restRepo from "../repository/restaurants.repository.js";
-import { getNaverMenusAndPhotos } from "./naver.service.js";
+import {
+  getNaverMenusAndPhotos,
+  buildExternalDetail,
+} from "./naver.service.js";
 
-/** 카테고리 문자열 → ENUM 매핑 */
+/** 카테고리 문자열 → ENUM 매핑 (Prisma enum: FoodCategory) */
 function toFoodCategoryEnum(input) {
   const s = String(input || "").toLowerCase();
   const pairs = [
-    // 메인
     ["한식", "KOREAN"],
     ["korean", "KOREAN"],
     ["일식", "JAPANESE"],
     ["japanese", "JAPANESE"],
+    ["스시", "JAPANESE"],
+    ["초밥", "JAPANESE"],
+    ["이자카야", "JAPANESE"],
     ["중식", "CHINESE"],
     ["chinese", "CHINESE"],
     ["양식", "WESTERN"],
     ["western", "WESTERN"],
     ["이탈리아", "WESTERN"],
-    // 패스트/분식/카페
+    ["피자", "WESTERN"],
     ["분식", "FASTFOOD"],
     ["패스트푸드", "FASTFOOD"],
     ["fastfood", "FASTFOOD"],
     ["버거", "FASTFOOD"],
     ["치킨", "FASTFOOD"],
-    ["피자", "WESTERN"],
     ["카페", "CAFE"],
     ["cafe", "CAFE"],
     ["커피", "CAFE"],
-    // 서브 카테고리 보강
-    ["이자카야", "JAPANESE"],
-    ["초밥", "JAPANESE"],
-    ["스시", "JAPANESE"],
   ];
   for (const [kw, code] of pairs) if (s.includes(kw)) return code;
   return "ETC";
@@ -37,7 +37,6 @@ function toFoodCategoryEnum(input) {
 
 /* ===== 입력 정규화 ===== */
 function normalizeTel(t = "") {
-  // 숫자만 남기고 7자리 미만이면 무시
   const digits = String(t).replace(/\D+/g, "");
   return digits.length >= 7 ? digits : "";
 }
@@ -75,17 +74,14 @@ function normalizePlacePayload(place = {}) {
 export async function syncExternalPlace(placePayload) {
   const p = normalizePlacePayload(placePayload);
 
-  // 1) 전화번호 우선
   if (p.telephone) {
     const byTel = await restRepo.findByTelephone(p.telephone);
     if (byTel) return { restaurantId: byTel.id, created: false };
   }
 
-  // 2) 이름+주소(대소문자 무시) 매칭
   const byNA = await restRepo.findByNameAddress(p.name, p.address);
   if (byNA) return { restaurantId: byNA.id, created: false };
 
-  // 3) 신규 생성
   const created = await restRepo.create({ ...p, isSponsored: false });
   return { restaurantId: created.id, created: true };
 }
@@ -121,7 +117,7 @@ export async function getRestaurantDetail(restaurantId, userId) {
   return { ...detail, isFavorite: favorite };
 }
 
-/** 네이버 외부 상세(메뉴/사진/전화/카테고리) 조회 */
+/** 네이버 외부 상세(메뉴/사진) → 내부 소비 스키마로 매핑 */
 export async function getRestaurantExternalDetail(restaurantId) {
   const base = await restRepo.findById(restaurantId);
   if (!base) {
@@ -130,7 +126,7 @@ export async function getRestaurantExternalDetail(restaurantId) {
     throw err;
   }
 
-  let ext = null;
+  let ext = { heroPhoto: null, menuPhotos: [], galleryPhotos: [] };
   try {
     ext = await getNaverMenusAndPhotos({
       name: base.name,
@@ -143,18 +139,17 @@ export async function getRestaurantExternalDetail(restaurantId) {
       address: base.address,
       err: e?.status || e?.message || String(e),
     });
-    ext = {};
   }
 
   return {
     restaurantId: base.id,
     name: base.name,
     address: base.address,
-    telephone: String(ext?.telephone ?? base.telephone ?? "").trim(),
-    category: toFoodCategoryEnum(ext?.category ?? base.category ?? ""),
-    menus: Array.isArray(ext?.menus) ? ext.menus : [],
-    photos: Array.isArray(ext?.photos) ? ext.photos : [],
-    placeId: ext?.placeId ?? null,
+    telephone: String(base.telephone ?? "").trim(),
+    category: toFoodCategoryEnum(base.category ?? ""),
+    heroPhoto: ext.heroPhoto ?? null,
+    menus: Array.isArray(ext.menuPhotos) ? ext.menuPhotos : [],
+    photos: Array.isArray(ext.galleryPhotos) ? ext.galleryPhotos : [],
   };
 }
 
@@ -174,7 +169,7 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
   const favorite = await restRepo.isFavorite(userId, restaurantId);
 
   // 외부(네이버) 메뉴/사진
-  let external = {};
+  let external = { heroPhoto: null, menuPhotos: [], galleryPhotos: [] };
   try {
     external = await getNaverMenusAndPhotos({
       name: base.name,
@@ -204,7 +199,7 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
       ecoScore: base.stats?.ecoScore ?? null,
       reviewCount: base.stats?.reviews ?? 0,
       isFavorite: favorite,
-      heroPhoto: external?.photos?.[0]?.url ?? null, // 상단 배너용
+      heroPhoto: external.heroPhoto ?? null,
     },
     tabs: {
       info: {
@@ -214,14 +209,11 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
         stats: base.stats,
       },
       menu: {
-        items: (external?.menus ?? []).map((m) => ({
-          name: m.name,
-          price: m.price ?? null,
-        })),
-        sourcePlaceId: external?.placeId ?? null,
+        items: [], // 구조화된 메뉴 없음
+        photos: external.menuPhotos ?? [],
       },
       gallery: {
-        photos: (external?.photos ?? []).slice(0, 8), // 외부 8장 선반영
+        photos: (external.galleryPhotos ?? []).slice(0, 8), // 외부 8장 선반영
         dbPhotos: galleryPaged.items, // DB 사진
         pageInfo: galleryPaged.pageInfo,
       },
@@ -236,9 +228,13 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
     },
   };
 }
+
+/** DB + NAVER 병합(상단 hero, 갤러리, 메뉴 사진 포함) */
 export async function getRestaurantFullDetail({ restaurant }) {
-  // DB + NAVER 병합
+  // DB 탭형 상세
   const db = await getRestaurantTabbedDetail(restaurant.id);
+
+  // NAVER 외부 상세(장소/갤러리/메뉴 사진 번들)
   const ext = await buildExternalDetail({
     name: restaurant.name,
     address: restaurant.address,
@@ -260,20 +256,21 @@ export async function getRestaurantFullDetail({ restaurant }) {
       info: {
         address: restaurant.address,
         telephone: restaurant.telephone,
-        // 필요시 ext.place에서 도로명, 카테고리 보강
-        naverCategory: ext.place?.category ?? null,
+        naverCategory: ext.place?.category ?? null, // buildExternalDetail가 place를 제공
       },
-      stats: db.tabs?.stats ?? {
-        reviews: 0,
-        photos: 0,
-        avgLeftoverRatio: null,
-        ecoScore: null,
+      // stats는 db.tabs.info.stats에 포함되어 있으므로 별도 섹션이 없다면 생략 가능
+      menu: {
+        items: [], // 구조화된 메뉴 없음
+        photos: ext.menu?.photos ?? ext.menuPhotos ?? [], // buildExternalDetail/호환
       },
-      menu: ext.menu, // 메뉴 사진으로 대체
       gallery: {
-        photos: ext.gallery.photos,
+        photos: ext.gallery?.photos ?? ext.galleryPhotos ?? [],
         dbPhotos: db.tabs?.gallery?.dbPhotos ?? [],
-        pageInfo: ext.gallery.pageInfo,
+        pageInfo: ext.gallery?.pageInfo ?? {
+          page: 1,
+          size: ext.galleryPhotos?.length ?? 0,
+          total: ext.galleryPhotos?.length ?? 0,
+        },
       },
       review: db.tabs?.review ?? {
         summary: { total: 0, avgEcoScore: null },

@@ -106,3 +106,25 @@ export async function getNaverMenusAndPhotos({ name, address, telephone }) {
   const menuPhotos = photos.filter((im) => /메뉴|menu/i.test(im.title));
   return { heroPhoto, menuPhotos, galleryPhotos: photos };
 }
+export async function buildExternalDetail({ name, address, telephone }) {
+  const [locals, images] = await Promise.all([
+    naverLocalSearch({ name, address, telephone }),
+    naverImageSearch({ name, address }),
+  ]);
+
+  const heroPhoto = images[0]?.link ?? null;
+  const menuPhotos = images.filter((im) => /메뉴|menu/i.test(im.title));
+
+  return {
+    place: locals?.[0] ?? null,
+    heroPhoto,
+    gallery: {
+      photos: images,
+      pageInfo: { page: 1, size: images.length, total: images.length },
+    },
+    menu: {
+      items: [], // 구조화된 메뉴 없음 → 사진으로 대체
+      photos: menuPhotos,
+    },
+  };
+}
