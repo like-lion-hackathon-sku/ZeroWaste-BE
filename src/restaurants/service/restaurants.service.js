@@ -42,6 +42,7 @@ function normalizeTel(t = "") {
 }
 
 /** 외부에서 들어오는 장소 payload 정규화 */
+/** 외부에서 들어오는 장소 payload 정규화 */
 function normalizePlacePayload(place = {}) {
   const name = String(place?.name ?? "").trim();
   const address = String(place?.address ?? "").trim();
@@ -61,7 +62,7 @@ function normalizePlacePayload(place = {}) {
     name,
     address,
     category: toFoodCategoryEnum(place?.category),
-    // develop 브랜치의 전화번호 정규화 로직을 채택
+    // 전화번호는 develop 브랜치 로직(정규화) 채택
     telephone: normalizeTel(place?.telephone ?? ""),
     mapx: toNumOrNull(place?.mapx),
     mapy: toNumOrNull(place?.mapy),
