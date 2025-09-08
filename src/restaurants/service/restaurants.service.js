@@ -1,10 +1,12 @@
+// 위치: src/restaurants/service/restaurants.service.js
 import * as restRepo from "../repository/restaurants.repository.js";
 import { getNaverMenusAndPhotos } from "./naver.service.js";
 
-/* ===== 카테고리 매핑 유틸 ===== */
+/** 카테고리 문자열 → ENUM 매핑 */
 function toFoodCategoryEnum(input) {
   const s = String(input || "").toLowerCase();
   const pairs = [
+    // 메인
     ["한식", "KOREAN"],
     ["korean", "KOREAN"],
     ["일식", "JAPANESE"],
@@ -12,14 +14,22 @@ function toFoodCategoryEnum(input) {
     ["중식", "CHINESE"],
     ["chinese", "CHINESE"],
     ["양식", "WESTERN"],
-    ["이탈리아", "WESTERN"],
     ["western", "WESTERN"],
+    ["이탈리아", "WESTERN"],
+    // 패스트/분식/카페
     ["분식", "FASTFOOD"],
     ["패스트푸드", "FASTFOOD"],
     ["fastfood", "FASTFOOD"],
+    ["버거", "FASTFOOD"],
+    ["치킨", "FASTFOOD"],
+    ["피자", "WESTERN"],
     ["카페", "CAFE"],
     ["cafe", "CAFE"],
     ["커피", "CAFE"],
+    // 서브 카테고리 보강
+    ["이자카야", "JAPANESE"],
+    ["초밥", "JAPANESE"],
+    ["스시", "JAPANESE"],
   ];
   for (const [kw, code] of pairs) if (s.includes(kw)) return code;
   return "ETC";
@@ -27,8 +37,9 @@ function toFoodCategoryEnum(input) {
 
 /* ===== 입력 정규화 ===== */
 function normalizeTel(t = "") {
-  const digits = String(t).replace(/\D+/g, ""); // 숫자만
-  return digits.length >= 7 ? digits : ""; // 7자리 미만이면 무시
+  // 숫자만 남기고 7자리 미만이면 무시 (무의미한 값으로 간주)
+  const digits = String(t).replace(/\D+/g, "");
+  return digits.length >= 7 ? digits : "";
 }
 
 function normalizePlacePayload(place = {}) {
@@ -63,23 +74,19 @@ export async function syncExternalPlace(placePayload) {
     if (byTel) return { restaurantId: byTel.id, created: false };
   }
 
-  // 2) 이름+주소(대소문자무시) 매칭
+  // 2) 이름+주소(대소문자 무시) 매칭
   const byNA = await restRepo.findByNameAddress(p.name, p.address);
   if (byNA) {
-    // 전화번호가 새로 들어왔고 기존에 없었다면 보강하고 반환 (선택)
-    if (p.telephone && !byNA.telephone) {
-      // 보강은 서비스 단에서 하고 싶다면 update 함수 추가해서 처리 가능
-      // 여기서는 간단히 매칭만
-    }
+    // 전화번호가 새로 들어왔고 기존에 없었다면 보강 여지도 있으나 여기서는 매칭만.
     return { restaurantId: byNA.id, created: false };
   }
 
-  // 3) 신규 생성 (telephone 빈문자 허용: Prisma 스키마상 required이기 때문)
+  // 3) 신규 생성 (telephone은 스키마상 required라 빈 문자열 저장 허용)
   const created = await restRepo.create({ ...p, isSponsored: false });
   return { restaurantId: created.id, created: true };
 }
 
-/** 멱등 확보 엔드포인트용 래퍼 */
+/** 식당 보장: id 또는 외부 place 로 생성/찾기 */
 export async function ensureRestaurant({ restaurantId, place }) {
   if (restaurantId == null && !place) {
     const err = new Error("RESTAURANT_ID_OR_PLACE_REQUIRED");
@@ -110,7 +117,7 @@ export async function getRestaurantDetail(restaurantId, userId) {
   return { ...detail, isFavorite: favorite };
 }
 
-/** 외부 네이버 상세조회 — 메뉴/사진 */
+/** 네이버 외부 상세(메뉴/사진/전화/카테고리) 조회 */
 export async function getRestaurantExternalDetail(restaurantId) {
   const base = await restRepo.findById(restaurantId);
   if (!base) {
@@ -126,7 +133,13 @@ export async function getRestaurantExternalDetail(restaurantId) {
       address: base.address,
     });
   } catch (e) {
-    console.warn("[NAVER][EXTERNAL-FAIL]", e?.status || e?.message || e);
+    // 운영 분석 편의 위해 컨텍스트 포함
+    console.warn("[NAVER][EXTERNAL-FAIL]", {
+      restaurantId,
+      name: base.name,
+      address: base.address,
+      err: e?.status || e?.message || String(e),
+    });
     ext = {};
   }
 
@@ -134,10 +147,10 @@ export async function getRestaurantExternalDetail(restaurantId) {
     restaurantId: base.id,
     name: base.name,
     address: base.address,
-    telephone: ext?.telephone ?? base.telephone ?? "",
-    category: ext?.category ?? base.category ?? "",
-    menus: ext?.menus ?? [],
-    photos: ext?.photos ?? [],
+    telephone: String(ext?.telephone ?? base.telephone ?? "").trim(),
+    category: toFoodCategoryEnum(ext?.category ?? base.category ?? ""),
+    menus: Array.isArray(ext?.menus) ? ext.menus : [],
+    photos: Array.isArray(ext?.photos) ? ext.photos : [],
     placeId: ext?.placeId ?? null,
   };
 }
