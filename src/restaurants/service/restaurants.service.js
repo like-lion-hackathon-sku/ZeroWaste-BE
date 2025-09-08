@@ -140,3 +140,91 @@ export async function getRestaurantExternalDetail(restaurantId) {
     placeId: ext?.placeId ?? null,
   };
 }
+import {
+  findDetailById,
+  isFavorite,
+  findRecentReviewsWithPhotos,
+  findGalleryPhotos,
+} from "../repository/restaurants.repository.js";
+
+/**
+ * FE 탭 UI용 상세 페이로드 조합:
+ * - header(상단 카드)
+ * - tabs.info / tabs.menu / tabs.gallery / tabs.review
+ */
+export async function getRestaurantTabbedDetail(restaurantId, userId) {
+  const base = await findDetailById(restaurantId);
+  if (!base) {
+    const err = new Error("RESTAURANT_NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+
+  // ecoScore/통계는 findDetailById에 이미 들어있음
+  const favorite = await isFavorite(userId, restaurantId);
+
+  // 외부(네이버) 메뉴/사진
+  let external = {};
+  try {
+    external = await getNaverMenusAndPhotos({
+      name: base.name,
+      address: base.address,
+    });
+  } catch (e) {
+    console.warn("[NAVER][EXTERNAL-FAIL]", e?.status || e?.message || e);
+  }
+
+  // 리뷰/갤러리 일부(초기 렌더용)
+  const reviewsPaged = await findRecentReviewsWithPhotos(restaurantId, {
+    page: 1,
+    size: 5,
+  });
+  const galleryPaged = await findGalleryPhotos(restaurantId, {
+    page: 1,
+    size: 8,
+  });
+
+  return {
+    header: {
+      id: base.id,
+      name: base.name,
+      category: base.category,
+      telephone: base.telephone,
+      address: base.address,
+      ecoScore: base.stats?.ecoScore ?? null,
+      reviewCount: base.stats?.reviews ?? 0,
+      isFavorite: favorite,
+      heroPhoto: external?.photos?.[0]?.url ?? null, // 상단 배너용 첫 사진
+    },
+    tabs: {
+      info: {
+        address: base.address,
+        telephone: base.telephone,
+        // 운영시간/소개는 스키마에 없어서 제외. 필요시 별도 필드 추가.
+        ecoScore: base.stats?.ecoScore ?? null,
+        stats: base.stats,
+      },
+      menu: {
+        items: (external?.menus ?? []).map((m) => ({
+          name: m.name,
+          price: m.price ?? null,
+          // desc 필드는 외부 데이터에 없을 때가 많아 생략
+        })),
+        sourcePlaceId: external?.placeId ?? null,
+      },
+      gallery: {
+        photos: (external?.photos ?? []).slice(0, 8), // 외부 8장 선반영
+        dbPhotos: galleryPaged.items, // DB에 저장된 사진 페이징
+        pageInfo: galleryPaged.pageInfo,
+      },
+      review: {
+        summary: {
+          total: base.stats?.reviews ?? 0,
+          avgEcoScore: base.stats?.ecoScore ?? null,
+        },
+        items: reviewsPaged.items,
+        pageInfo: reviewsPaged.pageInfo,
+      },
+    },
+  };
+}
