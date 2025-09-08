@@ -2,8 +2,7 @@
 import { StatusCodes } from "http-status-codes";
 import {
   ensureRestaurant,
-  getRestaurantDetail,
-  getRestaurantExternalDetail,
+  getRestaurantTabbedDetail, // ★ 이 함수 사용
 } from "../service/restaurants.service.js";
 
 /** PUT /api/restaurants  (멱등 확보) */
@@ -12,8 +11,9 @@ export const ensureRestaurantCtrl = async (req, res, next) => {
     const { restaurantId, place } = req.body ?? {};
     const result = await ensureRestaurant({ restaurantId, place });
 
-    if (typeof res.success === "function")
+    if (typeof res.success === "function") {
       return res.success(result, StatusCodes.OK);
+    }
     return res
       .status(StatusCodes.OK)
       .json({ resultType: "SUCCESS", error: null, success: result });
@@ -22,7 +22,11 @@ export const ensureRestaurantCtrl = async (req, res, next) => {
   }
 };
 
-/** GET /api/restaurants/:restaurantId/detail (DB + 네이버 통합 상세조회) */
+/**
+ * GET /api/restaurants/:restaurantId/detail
+ * - FE에서 한 번에 필요로 하는 탭형 상세(payload) 반환
+ *   header + tabs.info/menu/gallery/review
+ */
 export const getRestaurantFullDetailCtrl = async (req, res, next) => {
   try {
     const restaurantId = Number(req.params.restaurantId);
@@ -31,23 +35,37 @@ export const getRestaurantFullDetailCtrl = async (req, res, next) => {
     }
 
     const userId = req.user?.id ?? null;
+    const payload = await getRestaurantTabbedDetail(restaurantId, userId);
 
-    // 1. DB 상세 조회
-    const dbDetail = await getRestaurantDetail(restaurantId, userId);
-
-    // 2. 네이버 외부 상세 조회
-    const external = await getRestaurantExternalDetail(restaurantId);
-
-    // 3. 합쳐서 반환
-    return res.status(StatusCodes.OK).json({
-      resultType: "SUCCESS",
-      error: null,
-      success: {
-        ...dbDetail,
-        external, // 네이버 메뉴/사진 포함
-      },
-    });
+    if (typeof res.success === "function") {
+      return res.success(payload, StatusCodes.OK);
+    }
+    return res
+      .status(StatusCodes.OK)
+      .json({ resultType: "SUCCESS", error: null, success: payload });
   } catch (e) {
     next(e);
   }
 };
+
+/* ── (선택) DTO: 문서/Swagger용 ─────────────────────────────────── */
+
+export class EnsureRestaurantRequestDto {
+  /** @param {{ restaurantId?:number, place?: {
+   *   name:string, address:string, category?:string,
+   *   telephone?:string, mapx?:number, mapy?:number
+   * }}} body
+   */
+  constructor(body) {
+    this.restaurantId = body?.restaurantId ?? null;
+    this.place = body?.place ?? null;
+  }
+}
+
+export class EnsureRestaurantResponseDto {
+  /** @param {{ restaurantId:number, created:boolean }} result */
+  constructor(result) {
+    this.restaurantId = result.restaurantId;
+    this.created = result.created;
+  }
+}

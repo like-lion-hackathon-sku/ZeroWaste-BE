@@ -2,21 +2,15 @@
 import { Router } from "express";
 import {
   ensureRestaurantCtrl,
-  getRestaurantFullDetailCtrl,
+  getRestaurantFullDetailCtrl, // 컨트롤러 함수명 유지
 } from "../controller/restaurants.controller.js";
 import { getNearbyRestaurantsCtrl } from "../controller/nearby.controller.js";
 
 const r = Router();
 
-// 네이버 검색
 r.get("/nearby", getNearbyRestaurantsCtrl);
-
-// 식당 상세조회
-r.get("/:restaurantId/detail", getRestaurantFullDetailCtrl);
-
-r.get("/:restaurantId", getRestaurantFullDetailCtrl);
-
-/** 식당 확보(멱등) */
+r.get("/:restaurantId/detail", getRestaurantFullDetailCtrl); // OK
+r.get("/:restaurantId", getRestaurantFullDetailCtrl); // (원한다면 유지/제거 선택)
 r.put("/", ensureRestaurantCtrl);
 
 export default r;
