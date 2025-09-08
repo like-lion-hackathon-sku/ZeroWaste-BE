@@ -1,4 +1,3 @@
-// 위치: src/restaurants/service/restaurants.service.js
 import * as restRepo from "../repository/restaurants.repository.js";
 import { getNaverMenusAndPhotos } from "./naver.service.js";
 
@@ -35,10 +34,17 @@ function toFoodCategoryEnum(input) {
   return "ETC";
 }
 
+/* ===== 입력 정규화 ===== */
+function normalizeTel(t = "") {
+  // 숫자만 남기고 7자리 미만이면 무시 (무의미한 값으로 간주)
+  const digits = String(t).replace(/\D+/g, "");
+  return digits.length >= 7 ? digits : "";
+}
+
 /** 외부에서 들어오는 장소 payload 정규화 */
 function normalizePlacePayload(place = {}) {
-  const { name, address, category, telephone, mapx, mapy } = place;
-
+  const name = String(place?.name ?? "").trim();
+  const address = String(place?.address ?? "").trim();
   if (!name || !address) {
     const err = new Error("INVALID_PLACE_PAYLOAD");
     err.status = 400;
@@ -52,22 +58,37 @@ function normalizePlacePayload(place = {}) {
   };
 
   return {
-    name: String(name).trim(),
-    address: String(address).trim(),
-    category: toFoodCategoryEnum(category),
-    telephone: String(telephone ?? "")
-      .trim()
-      .slice(0, 15),
-    mapx: toNumOrNull(mapx),
-    mapy: toNumOrNull(mapy),
+    name,
+    address,
+    category: toFoodCategoryEnum(place?.category),
+    // develop 브랜치의 전화번호 정규화 로직을 채택
+    telephone: normalizeTel(place?.telephone ?? ""),
+    mapx: toNumOrNull(place?.mapx),
+    mapy: toNumOrNull(place?.mapy),
   };
 }
 
-/** 외부 장소 동기화(멱등) */
+/* ===== 외부 place → 내부 식당 동기화(멱등) =====
+   1) 전화번호(정규화된)가 있으면 전화번호로 매칭
+   2) 없거나 실패하면 이름+주소(대소문자 무시, trim)로 매칭
+   3) 둘 다 없으면 신규 생성
+*/
 export async function syncExternalPlace(placePayload) {
   const p = normalizePlacePayload(placePayload);
+
+  // 1) 전화번호 우선
+  if (p.telephone) {
+    const byTel = await restRepo.findByTelephone(p.telephone);
+    if (byTel) return { restaurantId: byTel.id, created: false };
+  }
+
+  // 2) 이름+주소(대소문자 무시) 매칭
   const byNA = await restRepo.findByNameAddress(p.name, p.address);
-  if (byNA) return { restaurantId: byNA.id, created: false };
+  if (byNA) {
+    return { restaurantId: byNA.id, created: false };
+  }
+
+  // 3) 신규 생성 (telephone은 스키마상 required라 빈 문자열 저장 허용)
   const created = await restRepo.create({ ...p, isSponsored: false });
   return { restaurantId: created.id, created: true };
 }
@@ -140,12 +161,6 @@ export async function getRestaurantExternalDetail(restaurantId) {
     placeId: ext?.placeId ?? null,
   };
 }
-import {
-  findDetailById,
-  isFavorite,
-  findRecentReviewsWithPhotos,
-  findGalleryPhotos,
-} from "../repository/restaurants.repository.js";
 
 /**
  * FE 탭 UI용 상세 페이로드 조합:
@@ -153,15 +168,14 @@ import {
  * - tabs.info / tabs.menu / tabs.gallery / tabs.review
  */
 export async function getRestaurantTabbedDetail(restaurantId, userId) {
-  const base = await findDetailById(restaurantId);
+  const base = await restRepo.findDetailById(restaurantId);
   if (!base) {
     const err = new Error("RESTAURANT_NOT_FOUND");
     err.status = 404;
     throw err;
   }
 
-  // ecoScore/통계는 findDetailById에 이미 들어있음
-  const favorite = await isFavorite(userId, restaurantId);
+  const favorite = await restRepo.isFavorite(userId, restaurantId);
 
   // 외부(네이버) 메뉴/사진
   let external = {};
@@ -175,11 +189,14 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
   }
 
   // 리뷰/갤러리 일부(초기 렌더용)
-  const reviewsPaged = await findRecentReviewsWithPhotos(restaurantId, {
-    page: 1,
-    size: 5,
-  });
-  const galleryPaged = await findGalleryPhotos(restaurantId, {
+  const reviewsPaged = await restRepo.findRecentReviewsWithPhotos(
+    restaurantId,
+    {
+      page: 1,
+      size: 5,
+    },
+  );
+  const galleryPaged = await restRepo.findGalleryPhotos(restaurantId, {
     page: 1,
     size: 8,
   });
@@ -200,7 +217,6 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
       info: {
         address: base.address,
         telephone: base.telephone,
-        // 운영시간/소개는 스키마에 없어서 제외. 필요시 별도 필드 추가.
         ecoScore: base.stats?.ecoScore ?? null,
         stats: base.stats,
       },
@@ -208,7 +224,6 @@ export async function getRestaurantTabbedDetail(restaurantId, userId) {
         items: (external?.menus ?? []).map((m) => ({
           name: m.name,
           price: m.price ?? null,
-          // desc 필드는 외부 데이터에 없을 때가 많아 생략
         })),
         sourcePlaceId: external?.placeId ?? null,
       },

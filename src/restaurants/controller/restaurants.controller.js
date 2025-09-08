@@ -1,10 +1,6 @@
-// 위치: src/restaurants/controller/restaurants.controller.js
 import { StatusCodes } from "http-status-codes";
-import {
-  ensureRestaurant,
-  getRestaurantDetail,
-  getRestaurantExternalDetail,
-} from "../service/restaurants.service.js";
+import { ensureRestaurant } from "../service/restaurants.service.js";
+import { getRestaurantTabbedDetail } from "../service/restaurants.service.js";
 
 /** PUT /api/restaurants  (멱등 확보) */
 export const ensureRestaurantCtrl = async (req, res, next) => {
@@ -14,6 +10,7 @@ export const ensureRestaurantCtrl = async (req, res, next) => {
 
     if (typeof res.success === "function")
       return res.success(result, StatusCodes.OK);
+
     return res
       .status(StatusCodes.OK)
       .json({ resultType: "SUCCESS", error: null, success: result });
@@ -22,16 +19,15 @@ export const ensureRestaurantCtrl = async (req, res, next) => {
   }
 };
 
-/** GET /api/restaurants/:restaurantId/detail (DB + 네이버 통합 상세조회) */
-/** GET /api/restaurants/:restaurantId/detail (탭 UI용 상세 조합 응답) */
+/** GET /api/restaurants/:restaurantId/tabbed (FE 탭 UI용 상세조회) */
 export const getRestaurantFullDetailCtrl = async (req, res, next) => {
   try {
     const restaurantId = Number(req.params.restaurantId);
     if (!Number.isInteger(restaurantId) || restaurantId <= 0) {
       return res.status(404).json({ ok: false, error: "NOT_FOUND" });
     }
-    const userId = req.user?.id ?? null;
 
+    const userId = req.user?.id ?? null;
     const payload = await getRestaurantTabbedDetail(restaurantId, userId);
 
     return res.status(StatusCodes.OK).json({
