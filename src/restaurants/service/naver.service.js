@@ -7,13 +7,9 @@ import https from "node:https";
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID ?? "";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET ?? "";
 
-// 네트워크 안정화: keepAlive, IPv4 우선 (IPv6 DNS 문제 회피)
-const httpAgent = new http.Agent({ keepAlive: true, timeout: 15000 });
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  timeout: 15000,
-  family: 4,
-});
+// ========================= 네트워크 안정화 =========================
+const httpAgent = new http.Agent({ keepAlive: true, family: 4 });
+const httpsAgent = new https.Agent({ keepAlive: true, family: 4 });
 
 const naver = axios.create({
   baseURL: "https://openapi.naver.com",
@@ -23,13 +19,12 @@ const naver = axios.create({
   headers: {
     "X-Naver-Client-Id": NAVER_CLIENT_ID,
     "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-    // 일부 환경에서 UA 없으면 차단되는 경우가 있어 추가
     "User-Agent": "FWZM/1.0 (+https://example.com)",
   },
   validateStatus: (s) => s >= 200 && s < 500,
 });
 
-// 간단 리트라이 (지수 백오프)
+// ========================= 간단 리트라이 (지수 백오프) =========================
 async function withRetry(fn, { retries = 2, baseDelay = 400 } = {}) {
   let lastErr;
   for (let i = 0; i <= retries; i++) {
@@ -56,12 +51,12 @@ export async function searchLocal(query, display = 5, start = 1) {
     err.status = 500;
     throw err;
   }
+
   const doReq = () =>
     naver.get("/v1/search/local.json", { params: { query, display, start } });
 
   const res = await withRetry(doReq);
 
-  // 디버그 로그
   if (process.env.DEBUG_NAVER === "1") {
     console.log("[NAVER][LOCAL-RES]", {
       status: res.status,
