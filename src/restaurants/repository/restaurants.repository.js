@@ -1,4 +1,3 @@
-// 위치: src/restaurants/repository/restaurants.repository.js
 import { PrismaClient } from "../../generated/prisma/index.js";
 
 const g = globalThis;
@@ -10,19 +9,39 @@ export async function findById(id) {
   return prisma.restaurants.findUnique({ where: { id: Number(id) } });
 }
 
-/** (멱등 매칭) name + address 로 조회 */
+/** 전화번호로 1순위 매칭 */
+export async function findByTelephone(telephone) {
+  if (!telephone) return null;
+  return prisma.restaurants.findFirst({
+    where: { telephone },
+    select: { id: true, name: true, address: true, telephone: true },
+  });
+}
+
+/** (멱등 매칭) name + address (대소문자 무시 & trim) */
 export async function findByNameAddress(name, address) {
-  if (!name || !address) return null;
-  return prisma.restaurants.findFirst({ where: { name, address } });
+  const nm = String(name ?? "").trim();
+  const addr = String(address ?? "").trim();
+  if (!nm || !addr) return null;
+
+  return prisma.restaurants.findFirst({
+    where: {
+      AND: [
+        { name: { equals: nm, mode: "insensitive" } },
+        { address: { equals: addr, mode: "insensitive" } },
+      ],
+    },
+    select: { id: true, name: true, address: true, telephone: true },
+  });
 }
 
 /** 신규 생성 */
 export async function create(data) {
   const payload = {
     name: String(data.name).slice(0, 50),
-    category: data.category,
+    category: data.category, // enum
     address: String(data.address),
-    telephone: (data.telephone ?? "").slice(0, 15),
+    telephone: String(data.telephone ?? "").slice(0, 15), // 스키마상 required이므로 빈문자 허용
     mapx: data.mapx ?? null,
     mapy: data.mapy ?? null,
     isSponsored: !!data.isSponsored,
