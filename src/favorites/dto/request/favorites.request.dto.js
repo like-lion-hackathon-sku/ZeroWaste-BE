@@ -1,9 +1,5 @@
-// 위치: src/favorites/dto/favorites.request.dto.js
-
 /**
  * 즐겨찾기 추가 (restaurantId 보유 시)
- * - Path param 으로 restaurantId 전달하므로 DTO는 따로 필요 없을 수 있음.
- * - 하지만 일관성을 위해 정의해둠
  */
 export class AddFavoriteByIdRequestDto {
   /**
@@ -26,7 +22,7 @@ export class AddFavoriteByExternalRequestDto {
    * @param {number} p.mapx
    * @param {number} p.mapy
    * @param {string=} p.category
-   * @param {string=} p.telephone
+   * @param {string} p.telephone         // ★ Prisma Restaurants.telephone required
    * @param {boolean=} p.is_sponsored
    */
   constructor({
@@ -43,7 +39,7 @@ export class AddFavoriteByExternalRequestDto {
     this.mapx = Number(mapx);
     this.mapy = Number(mapy);
     this.category = category ?? null;
-    this.telephone = telephone ?? null;
+    this.telephone = telephone; // 없으면 서비스단에서 400 처리
     this.is_sponsored = !!is_sponsored;
   }
 }
