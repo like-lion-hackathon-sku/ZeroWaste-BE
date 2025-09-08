@@ -343,12 +343,9 @@ export function isRestaurantCategory(cat = "", name = "") {
   );
 }
 
-export const getNearbyRestaurantsCtrl = async (req, res, _next) => {
+export const getNearbyRestaurantsCtrl = async (req, res, next) => {
   try {
-    const qRaw = req.query.q;
-    const q = typeof qRaw === "string" ? qRaw.trim() : "";
-    const size = Number(req.query.size) > 0 ? Number(req.query.size) : 10;
-
+    const { q } = req.query;
     if (!q) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         resultType: "FAIL",
@@ -357,45 +354,31 @@ export const getNearbyRestaurantsCtrl = async (req, res, _next) => {
       });
     }
 
-    // 1) 네이버 검색 (실패해도 빈 배열로 복구)
-    let places = [];
-    try {
-      places = await searchLocal(q, size);
-    } catch (e) {
-      console.error("[NEARBY][NAVER_FAIL]", e?.status, e?.message);
-      places = [];
-    }
+    // 1) 네이버 검색 (실패 시 에러 throw → next(e) → 500)
+    const places = await searchLocal(q, 10);
 
-    // 2) 카테고리 필터
+    // 2) 식당/카페 등만 필터링
     const filtered = places.filter((p) =>
       isRestaurantCategory(p?.category, p?.name),
     );
 
-    // 3) 이름+주소 중복 제거
+    // 3) 이름+주소 기준 중복 제거
     const uniq = [];
     const seen = new Set();
     for (const p of filtered) {
-      const key = `${(p?.name ?? "").trim()}__${(p?.address ?? "").trim()}`;
+      const key = `${p.name}__${p.address}`;
       if (seen.has(key)) continue;
       seen.add(key);
       uniq.push(p);
     }
 
-    // 4) DB 멱등 + 점수 조회 (동시 처리)
-    const items = await Promise.all(
-      uniq.map(async (p) => {
-        try {
-          const ensured = await ensureRestaurant({ place: p });
-          const rid = ensured?.restaurantId ?? ensured?.id; // 어느 필드가 와도 대응
-          const score = rid ? await getRestaurantScore(rid) : null;
-          return { restaurantId: rid ?? null, ...p, score };
-        } catch (e) {
-          console.error("[NEARBY][ENSURE/SCORE_FAIL]", e?.message);
-          // 한 항목 실패해도 나머지 진행
-          return { restaurantId: null, ...p, score: null };
-        }
-      }),
-    );
+    // 4) DB 멱등 확보 + 점수 조인
+    const items = [];
+    for (const p of uniq) {
+      const { restaurantId } = await ensureRestaurant({ place: p });
+      const score = await getRestaurantScore(restaurantId);
+      items.push({ restaurantId, ...p, score });
+    }
 
     return res.status(StatusCodes.OK).json({
       resultType: "SUCCESS",
@@ -403,12 +386,6 @@ export const getNearbyRestaurantsCtrl = async (req, res, _next) => {
       success: { items },
     });
   } catch (e) {
-    console.error("[NEARBY][UNCAUGHT]", e);
-    // 최후 방어선: 200 + 빈 결과
-    return res.status(StatusCodes.OK).json({
-      resultType: "SUCCESS",
-      error: null,
-      success: { items: [] },
-    });
+    next(e); // 👉 에러 그대로 전달 → 프론트에서 목업 처리
   }
 };
