@@ -1,45 +1,74 @@
+// src/restaurants/service/naver.service.js
 import "dotenv/config";
 import axios from "axios";
+import http from "node:http";
+import https from "node:https";
 
 const NAVER_CLIENT_ID = process.env.NAVER_CLIENT_ID ?? "";
 const NAVER_CLIENT_SECRET = process.env.NAVER_CLIENT_SECRET ?? "";
 
-const dlog = (...args) => {
-  if (process.env.DEBUG_NAVER === "1") console.log(...args);
-};
+// 네트워크 안정화: keepAlive, IPv4 우선 (IPv6 DNS 문제 회피)
+const httpAgent = new http.Agent({ keepAlive: true, timeout: 15000 });
+const httpsAgent = new https.Agent({
+  keepAlive: true,
+  timeout: 15000,
+  family: 4,
+});
 
-function stripTags(s = "") {
-  return String(s).replace(/<[^>]*>/g, "");
-}
-function toNumberOrNull(v) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
+const naver = axios.create({
+  baseURL: "https://openapi.naver.com",
+  timeout: 15000, // ⬆️ 7s → 15s
+  httpAgent,
+  httpsAgent,
+  headers: {
+    "X-Naver-Client-Id": NAVER_CLIENT_ID,
+    "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
+    // 일부 환경에서 UA 없으면 차단되는 경우가 있어 추가
+    "User-Agent": "FWZM/1.0 (+https://example.com)",
+  },
+  validateStatus: (s) => s >= 200 && s < 500,
+});
+
+// 간단 리트라이 (지수 백오프)
+async function withRetry(fn, { retries = 2, baseDelay = 400 } = {}) {
+  let lastErr;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      lastErr = e;
+      const transient =
+        e.code === "ECONNABORTED" ||
+        e.code === "ETIMEDOUT" ||
+        e.code === "ECONNRESET" ||
+        e.response?.status >= 500;
+      if (!transient || i === retries) break;
+      await new Promise((r) => setTimeout(r, baseDelay * 2 ** i));
+    }
+  }
+  throw lastErr;
 }
 
 /* ========================= 네이버 로컬 검색 ========================= */
-export async function searchLocal(query, display = 5) {
+export async function searchLocal(query, display = 5, start = 1) {
   if (!NAVER_CLIENT_ID || !NAVER_CLIENT_SECRET) {
     const err = new Error("NAVER_API_KEYS_MISSING");
     err.status = 500;
     throw err;
   }
+  const doReq = () =>
+    naver.get("/v1/search/local.json", { params: { query, display, start } });
 
-  const url = "https://openapi.naver.com/v1/search/local.json";
-  const res = await axios.get(url, {
-    params: { query, display },
-    headers: {
-      "X-Naver-Client-Id": NAVER_CLIENT_ID,
-      "X-Naver-Client-Secret": NAVER_CLIENT_SECRET,
-    },
-    timeout: 7000,
-    validateStatus: (s) => s >= 200 && s < 500,
-  });
+  const res = await withRetry(doReq);
 
-  dlog("[NAVER][LOCAL-RES]", {
-    status: res.status,
-    len: res.data?.items?.length ?? 0,
-    errorMessage: res.data?.errorMessage ?? res.data?.message ?? null,
-  });
+  // 디버그 로그
+  if (process.env.DEBUG_NAVER === "1") {
+    console.log("[NAVER][LOCAL-RES]", {
+      status: res.status,
+      len: res.data?.items?.length ?? 0,
+      errorMessage: res.data?.errorMessage ?? res.data?.message ?? null,
+    });
+  }
 
   if (res.status >= 400) {
     const err = new Error(`NAVER_LOCAL_SEARCH_FAILED(${res.status})`);
@@ -47,6 +76,9 @@ export async function searchLocal(query, display = 5) {
     err.data = res.data;
     throw err;
   }
+
+  const stripTags = (s = "") => String(s).replace(/<[^>]*>/g, "");
+  const toNumberOrNull = (v) => (Number.isFinite(+v) ? +v : null);
 
   return (res.data?.items ?? []).map((item) => ({
     name: stripTags(item.title),
@@ -57,17 +89,4 @@ export async function searchLocal(query, display = 5) {
     mapy: toNumberOrNull(item.mapy),
     link: item.link ?? "",
   }));
-}
-
-export async function searchNearby({ q, page = 1, size = 20 }) {
-  // 네이버 로컬검색은 start(1~)가 있으나, 현재 searchLocal 시그니처가 (query, display)만 지원하므로
-  // 우선 display만 맞추고, 나중에 필요하면 start 파라미터를 추가하세요.
-  const items = await searchLocal(q, size);
-  // FE가 쓰기 편한 형태로 래핑
-  return {
-    total: items.length, // 네이버는 total을 주지만 현재 함수는 map만 리턴 → 필요하면 res.data.total까지 넘기도록 확장
-    items,
-    page,
-    size,
-  };
 }
