@@ -5,6 +5,7 @@ import {
   handleRefresh,
   handleLogout,
   handleProfile,
+  handleGetProfile,
 } from "../controller/auth.controller.js";
 import { authenticateAccessToken } from "../middleware/auth.middleware.js";
 import multer from "multer";
@@ -21,6 +22,7 @@ router.post(
   "/profile",
   authenticateAccessToken,
   upload.single("profileImage"),
-  handleProfile,
+  handleProfile
 );
+router.get("/me", authenticateAccessToken, handleGetProfile);
 export default router;
