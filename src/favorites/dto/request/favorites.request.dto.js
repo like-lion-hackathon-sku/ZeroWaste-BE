@@ -1,59 +1,68 @@
-// 위치: src/favorites/dto/favorites.request.dto.js
+치: src / favorites / controller / favorites.controller.js;
+import {
+  addFavorite,
+  removeFavorite,
+  listMyFavorites,
+} from "../service/favorites.service.js";
+import { StatusCodes } from "http-status-codes";
 
-/**
- * 즐겨찾기 추가 (restaurantId 보유 시)
- * - Path param 으로 restaurantId 전달하므로 DTO는 따로 필요 없을 수 있음.
- * - 하지만 일관성을 위해 정의해둠
- */
-export class AddFavoriteByIdRequestDto {
-  /**
-   * @param {number} restaurantId - 식당 ID
-   */
-  constructor({ restaurantId }) {
-    this.restaurantId = Number(restaurantId);
-  }
-}
+/** 즐겨찾기 목록 */
+export const listMyFavoritesCtrl = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
 
-/**
- * 즐겨찾기 추가 (외부 place 데이터만 있을 때)
- * - 네이버 place API에서 받은 데이터를 body로 전달
- */
-export class AddFavoriteByExternalRequestDto {
-  /**
-   * @param {object} p
-   * @param {string} p.name
-   * @param {string} p.address
-   * @param {number} p.mapx
-   * @param {number} p.mapy
-   * @param {string=} p.category
-   * @param {string=} p.telephone
-   * @param {boolean=} p.is_sponsored
-   */
-  constructor({
-    name,
-    address,
-    mapx,
-    mapy,
-    category,
-    telephone,
-    is_sponsored,
-  }) {
-    this.name = name;
-    this.address = address;
-    this.mapx = Number(mapx);
-    this.mapy = Number(mapy);
-    this.category = category ?? null;
-    this.telephone = telephone ?? null;
-    this.is_sponsored = !!is_sponsored;
-  }
-}
+    // page/size를 숫자로 정규화
+    const pageRaw = req.query.page ?? 1;
+    const sizeRaw = req.query.size ?? 20;
+    const page = Number.isFinite(+pageRaw) && +pageRaw > 0 ? +pageRaw : 1;
+    const size = Number.isFinite(+sizeRaw) && +sizeRaw > 0 ? +sizeRaw : 20;
 
-/**
- * 즐겨찾기 삭제 요청
- * - Path param 으로 restaurantId 전달
- */
-export class RemoveFavoriteRequestDto {
-  constructor({ restaurantId }) {
-    this.restaurantId = Number(restaurantId);
+    const data = await listMyFavorites(userId, { page, size });
+
+    if (typeof res.success === "function")
+      return res.success(data, StatusCodes.OK);
+
+    return res
+      .status(StatusCodes.OK)
+      .json({ resultType: "SUCCESS", error: null, success: data });
+  } catch (e) {
+    next(e);
   }
-}
+};
+
+/** 즐겨찾기 추가(멱등) */
+export const upsertFavorite = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { restaurantId, place } = req.body ?? {};
+    const result = await addFavorite({ userId, restaurantId, place });
+
+    if (typeof res.success === "function")
+      return res.success(result, StatusCodes.OK);
+
+    return res
+      .status(StatusCodes.OK)
+      .json({ resultType: "SUCCESS", error: null, success: result });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/** 즐겨찾기 삭제 */
+export const removeFavoriteById = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const restaurantId = Number(req.params.restaurantId);
+
+    await removeFavorite(userId, restaurantId);
+
+    if (typeof res.success === "function")
+      return res.success(true, StatusCodes.OK);
+
+    return res
+      .status(StatusCodes.OK)
+      .json({ resultType: "SUCCESS", error: null, success: true });
+  } catch (e) {
+    next(e);
+  }
+};
