@@ -31,6 +31,7 @@ import {
   deleteUncompletedUsers,
 } from "../repository/auth.repository.js";
 import {
+  findUserBasicForPorfile,
   countUserStats,
   avgLeftoverRatioByUser,
 } from "../repository/profile.repository.js";
@@ -234,9 +235,9 @@ export const validateUserIsExist = async (userId) => {
  *  '프로필 조회'를 위한 함수입니다.
  */
 export const getProfile = async (userId) => {
-  const user = await findAccountById(userId);
+  const user = await findUserBasicForPorfile(userId);
 
-  if (!user || user === -1) {
+  if (!user) {
     throw new UserNotFoundError("존재하지 않는 사용자입니다.");
   }
   const stats = await countUserStats(userId);
