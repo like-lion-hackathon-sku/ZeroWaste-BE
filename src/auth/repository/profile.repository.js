@@ -1,5 +1,16 @@
 import { prisma } from "../../db.config.js";
 
+export const findUserBasicForPorfile = async (userId) => {
+  return prisma.user.findUnique({
+    select: {
+      id: true,
+      email: true,
+      nickname: true,
+      createdAt: true,
+    },
+    where: { id: userId },
+  });
+};
 /**
  * **[Profile]**
  * **\<📦 Repository\>**
@@ -20,7 +31,7 @@ export const countUserStats = async (userId) => {
  * **[Profile]**
  * **\<📦 Repository\>**
  * ***avgLeftoverRatioByUser***
- * 
+ *
  * @param {number} userId
  * @returns {Promise<number|null>}
  */

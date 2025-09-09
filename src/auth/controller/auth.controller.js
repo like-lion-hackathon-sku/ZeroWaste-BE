@@ -5,7 +5,7 @@ import {
   signUp,
   logout,
   setProfile,
-  getProfile, 
+  getProfile,
 } from "../service/auth.service.js";
 import {
   bodyToLogin,
@@ -677,7 +677,7 @@ export const handleGetProfile = async (req, res, next) => {
   /*
     #swagger.summary = '내 프로필 조회'
     #swagger.tags = ['Auth']
-    #swagger.description = '로그인한 사용자의 프로필 정보를 조회합니다. 로그인 필요(AccessToken).'
+    #swagger.description = '로그인한 사용자의 프로필 정보를 조회합니다. (AccessToken 필요)'
     #swagger.responses[200] = {
       description: "프로필 조회 성공",
       content: {
@@ -688,18 +688,7 @@ export const handleGetProfile = async (req, res, next) => {
               id: { type: "number", example: 1 },
               email: { type: "string", example: "example@example.com" },
               nickname: { type: "string", example: "현준" },
-              profile: { type: "string", example: "profile.png" },
-              isCompleted: { type: "boolean", example: true },
-              createdAt: { type: "string", example: "2025-09-01T12:34:56.000Z" },
-              stats: {
-                type: "object",
-                properties: {
-                  reviews: { type: "number", example: 5 },
-                  favorites: { type: "number", example: 3 },
-                  badges: { type: "number", example: 2 },
-                  leftoverStars: { type: "number", example: 4.5 }
-                }
-              }
+              created_at: { type: "string", example: "2025-09-01" }
             }
           }
         }

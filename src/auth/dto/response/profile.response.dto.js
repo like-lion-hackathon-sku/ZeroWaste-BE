@@ -12,7 +12,9 @@ export const responseFromGetProfile = (user, stats) => {
     id: user.id,
     email: user.email,
     nickname: user.nickname,
-    createdAt: user.created_at,
+    created_at: user.createdAt
+      ? user.createdAt.toISOString().split("T")[0] // "YYYY-MM-DD"
+      : null,
   };
   return {
     ...base,
@@ -24,4 +26,3 @@ export const responseFromGetProfile = (user, stats) => {
     },
   };
 };
-
