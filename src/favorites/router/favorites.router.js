@@ -5,6 +5,10 @@ import {
   removeFavoriteById,
   listMyFavoritesCtrl,
 } from "../controller/favorites.controller.js";
+import {
+  authenticateAccessToken,
+  verifyUserIsActive,
+} from "../../auth/middleware/auth.middleware.js";
 
 const r = Router();
 
@@ -17,14 +21,17 @@ function onlyDigits404(req, res, next) {
   next();
 }
 function requireAuth(req, res, next) {
-  if (!req.user?.id) {
+  const u = req.user || req.payload; // payload도 허용
+  if (!u || !u.id) {
     return res.status(401).json({ ok: false, error: "UNAUTHORIZED" });
   }
+  req.user = u; // 이후 컨트롤러들이 req.user 기대하므로 세팅
   next();
 }
-
+r.use(authenticateAccessToken);
 /* ───────── 미들웨어 ───────── */
 r.use(requireAuth);
+r.use(verifyUserIsActive);
 
 /* ───────── 라우트 ───────── */
 
