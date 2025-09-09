@@ -1,6 +1,6 @@
 // 위치: src/restaurants/controller/nearby.controller.js
 import { StatusCodes } from "http-status-codes";
-import { searchLocal } from "../service/naver.service.js";
+import { textSearch, nearbySearch } from "../service/google.service.js";
 import { ensureRestaurant } from "../service/restaurants.service.js";
 import { getRestaurantScore } from "../service/score.service.js";
 
