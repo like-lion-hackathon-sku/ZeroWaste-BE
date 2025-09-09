@@ -30,6 +30,12 @@ import {
   updateRefreshToken,
   deleteUncompletedUsers,
 } from "../repository/auth.repository.js";
+import {
+  findUserBasicForPorfile,
+  countUserStats,
+  avgLeftoverRatioByUser,
+} from "../repository/profile.repository.js";
+import { responseFromGetProfile } from "../dto/response/profile.response.dto.js";
 /**
  * **[Auth]**
  * **\<🛠️ Service\>**
@@ -221,4 +227,22 @@ export const cleanUncompletedUsers = async () => {
 export const validateUserIsExist = async (userId) => {
   const user = await findAccountById(userId);
   return user != -1;
+};
+/**
+ *  **[Auth]**
+ *  **\<Service>\**
+ *  ***getProfile***
+ *  '프로필 조회'를 위한 함수입니다.
+ */
+export const getProfile = async (userId) => {
+  const user = await findUserBasicForPorfile(userId);
+
+  if (!user) {
+    throw new UserNotFoundError("존재하지 않는 사용자입니다.");
+  }
+  const stats = await countUserStats(userId);
+  const avg = await avgLeftoverRatioByUser(userId);
+  const leftoverStars = avg == null ? null : Number(((1 - avg) * 5).toFixed(1));
+  const body = responseFromGetProfile(user, { ...stats, leftoverStars });
+  return body;
 };

@@ -1,12 +1,9 @@
-// 위치: src/restaurants/service/restaurants.service.js
 import * as restRepo from "../repository/restaurants.repository.js";
-import { getNaverMenusAndPhotos } from "./naver.service.js";
 
 /** 카테고리 문자열 → ENUM 매핑 */
 function toFoodCategoryEnum(input) {
   const s = String(input || "").toLowerCase();
   const pairs = [
-    // 메인
     ["한식", "KOREAN"],
     ["korean", "KOREAN"],
     ["일식", "JAPANESE"],
@@ -16,7 +13,6 @@ function toFoodCategoryEnum(input) {
     ["양식", "WESTERN"],
     ["western", "WESTERN"],
     ["이탈리아", "WESTERN"],
-    // 패스트/분식/카페
     ["분식", "FASTFOOD"],
     ["패스트푸드", "FASTFOOD"],
     ["fastfood", "FASTFOOD"],
@@ -26,7 +22,6 @@ function toFoodCategoryEnum(input) {
     ["카페", "CAFE"],
     ["cafe", "CAFE"],
     ["커피", "CAFE"],
-    // 서브 카테고리 보강
     ["이자카야", "JAPANESE"],
     ["초밥", "JAPANESE"],
     ["스시", "JAPANESE"],
@@ -35,7 +30,7 @@ function toFoodCategoryEnum(input) {
   return "ETC";
 }
 
-/** 외부에서 들어오는 장소 payload 정규화 */
+/** 외부 place payload 정규화 */
 function normalizePlacePayload(place = {}) {
   const { name, address, category, telephone, mapx, mapy } = place;
 
@@ -91,7 +86,7 @@ export async function ensureRestaurant({ restaurantId, place }) {
   return await syncExternalPlace(place);
 }
 
-/** ✅ DB 상세조회 + 즐겨찾기 여부 */
+/** DB 상세 + 즐겨찾기 여부 */
 export async function getRestaurantDetail(restaurantId, userId) {
   const detail = await restRepo.findDetailById(restaurantId);
   if (!detail) {
@@ -101,42 +96,4 @@ export async function getRestaurantDetail(restaurantId, userId) {
   }
   const favorite = await restRepo.isFavorite(userId, restaurantId);
   return { ...detail, isFavorite: favorite };
-}
-
-/** 네이버 외부 상세(메뉴/사진/전화/카테고리) 조회 */
-export async function getRestaurantExternalDetail(restaurantId) {
-  const base = await restRepo.findById(restaurantId);
-  if (!base) {
-    const err = new Error("RESTAURANT_NOT_FOUND");
-    err.status = 404;
-    throw err;
-  }
-
-  let ext = null;
-  try {
-    ext = await getNaverMenusAndPhotos({
-      name: base.name,
-      address: base.address,
-    });
-  } catch (e) {
-    // 운영 분석 편의 위해 컨텍스트 포함
-    console.warn("[NAVER][EXTERNAL-FAIL]", {
-      restaurantId,
-      name: base.name,
-      address: base.address,
-      err: e?.status || e?.message || String(e),
-    });
-    ext = {};
-  }
-
-  return {
-    restaurantId: base.id,
-    name: base.name,
-    address: base.address,
-    telephone: String(ext?.telephone ?? base.telephone ?? "").trim(),
-    category: toFoodCategoryEnum(ext?.category ?? base.category ?? ""),
-    menus: Array.isArray(ext?.menus) ? ext.menus : [],
-    photos: Array.isArray(ext?.photos) ? ext.photos : [],
-    placeId: ext?.placeId ?? null,
-  };
 }

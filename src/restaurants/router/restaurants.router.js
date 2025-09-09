@@ -1,22 +1,15 @@
-// 위치: src/restaurants/router/restaurants.router.js
 import { Router } from "express";
 import {
   ensureRestaurantCtrl,
-  getRestaurantFullDetailCtrl,
+  getRestaurantDetailCtrl,
 } from "../controller/restaurants.controller.js";
 import { getNearbyRestaurantsCtrl } from "../controller/nearby.controller.js";
 
 const r = Router();
 
-// 네이버 검색
-r.get("/nearby", getNearbyRestaurantsCtrl);
-
-// 식당 상세조회
-r.get("/:restaurantId/detail", getRestaurantFullDetailCtrl);
-
-r.get("/:restaurantId", getRestaurantFullDetailCtrl);
-
-/** 식당 확보(멱등) */
-r.put("/", ensureRestaurantCtrl);
+r.get("/nearby", getNearbyRestaurantsCtrl); // 네이버 검색 + 멱등 확보
+r.get("/:restaurantId/detail", getRestaurantDetailCtrl); // DB 상세만
+r.get("/:restaurantId", getRestaurantDetailCtrl); // 호환 라우트
+r.put("/", ensureRestaurantCtrl); // 멱등 확보
 
 export default r;
