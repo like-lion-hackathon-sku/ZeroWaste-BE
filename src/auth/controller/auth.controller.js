@@ -5,6 +5,7 @@ import {
   signUp,
   logout,
   setProfile,
+  getProfile, 
 } from "../service/auth.service.js";
 import {
   bodyToLogin,
@@ -158,14 +159,14 @@ export const handleSignUp = async (req, res, next) => {
   if (!req.body.email || !regex.email.test(req.body.email)) {
     throw new InvalidInputValueError(
       "이메일 형식이 올바르지 않습니다.",
-      req.body,
+      req.body
     );
   }
   // ✅ 유효성 검사 (비밀번호)
   if (!req.body.password || !regex.password.test(req.body.password)) {
     throw new InvalidInputValueError(
       "비밀번호 형식이 올바르지 않습니다.",
-      req.body,
+      req.body
     );
   }
   const auth = await signUp(bodyToSignUp(req.body));
@@ -335,14 +336,14 @@ export const handleLogin = async (req, res, next) => {
   if (!req.body.email || !regex.email.test(req.body.email)) {
     throw new InvalidInputValueError(
       "이메일 형식이 올바르지 않습니다.",
-      req.body,
+      req.body
     );
   }
   // ✅ 유효성 검사 (비밀번호)
   if (!req.body.password) {
     throw new InvalidInputValueError(
       "비밀번호를 입력하지 않았습니다.",
-      req.body,
+      req.body
     );
   }
   const user = await login(bodyToLogin(req.body));
@@ -643,7 +644,7 @@ export const handleProfile = async (req, res, next) => {
   } catch (e) {
     throw new InvalidInputValueError(
       "기본 이미지 설정이 올바르지 않습니다.",
-      req.body,
+      req.body
     );
   }
   // ✅ 유효성 검사 (배너 이미지)
@@ -654,7 +655,7 @@ export const handleProfile = async (req, res, next) => {
   ) {
     throw new InvalidInputValueError(
       "올바른 프로필 이미지를 등록 해 주세요.",
-      req.body,
+      req.body
     );
   }
   // ✅ 유효성 검사 (닉네임)
@@ -662,7 +663,58 @@ export const handleProfile = async (req, res, next) => {
     throw new InvalidInputValueError("닉네임이 올바르지 않습니다.", req.body);
   }
   const profile = await setProfile(
-    bodyToProfile(req.body, req.payload, req.file),
+    bodyToProfile(req.body, req.payload, req.file)
   );
   res.status(StatusCodes.OK).success(profile);
+};
+/**
+ * **[Auth]**
+ *  **<🕹️ Controller>**
+ *  ***handleGetProfile***
+ *  '내 프로필 조회' 기능 담당 API의 컨트롤러
+ */
+export const handleGetProfile = async (req, res, next) => {
+  /*
+    #swagger.summary = '내 프로필 조회'
+    #swagger.tags = ['Auth']
+    #swagger.description = '로그인한 사용자의 프로필 정보를 조회합니다. 로그인 필요(AccessToken).'
+    #swagger.responses[200] = {
+      description: "프로필 조회 성공",
+      content: {
+        "application/json": {
+          schema: {
+            type: "object",
+            properties: {
+              id: { type: "number", example: 1 },
+              email: { type: "string", example: "example@example.com" },
+              nickname: { type: "string", example: "현준" },
+              profile: { type: "string", example: "profile.png" },
+              isCompleted: { type: "boolean", example: true },
+              createdAt: { type: "string", example: "2025-09-01T12:34:56.000Z" },
+              stats: {
+                type: "object",
+                properties: {
+                  reviews: { type: "number", example: 5 },
+                  favorites: { type: "number", example: 3 },
+                  badges: { type: "number", example: 2 },
+                  leftoverStars: { type: "number", example: 4.5 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    #swagger.responses[401] = {
+      description: "인증 실패 (로그인 필요)"
+    }
+  */
+  try {
+    const userId = req.payload.id;
+    const profile = await getProfile(userId);
+
+    res.status(StatusCodes.OK).success(profile);
+  } catch (err) {
+    next(err);
+  }
 };
