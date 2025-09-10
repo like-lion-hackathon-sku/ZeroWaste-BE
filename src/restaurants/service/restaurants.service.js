@@ -1,10 +1,12 @@
-import { prisma } from "../../generated/prisma/index.js";
+import pkg from "../../generated/prisma/index.js";
+const { PrismaClient } = pkg;
+
+const prisma = new PrismaClient(); // ✅ 여기서 인스턴스 생성
+
 import { toFoodCategory } from "./category.mapper.js";
 
 /**
  * 네이버 place 객체를 멱등 저장하고 ID/기본정보를 반환
- * - 중복 기준: (name + address) 우선 → 없으면 (telephone + 좌표) 보조
- * - 저장 시 FoodCategory 매핑을 적용
  */
 export async function ensureRestaurant({ place }) {
   const {
@@ -16,12 +18,9 @@ export async function ensureRestaurant({ place }) {
     mapy = null,
   } = place ?? {};
 
-  // 1) 우선 동일 name+address 검색
+  // 1) name+address로 우선 탐색
   let found = await prisma.restaurant.findFirst({
-    where: {
-      name,
-      address,
-    },
+    where: { name, address },
   });
 
   // 2) 없으면 전화/좌표로 보조 탐색
@@ -36,10 +35,9 @@ export async function ensureRestaurant({ place }) {
     });
   }
 
-  const categoryEnum = toFoodCategory(rawCat, name); // ✅ enum 문자열 계산
+  const categoryEnum = toFoodCategory(rawCat, name);
 
   if (found) {
-    // 업데이트(이름/주소 변동, 카테고리 갱신 등)
     const updated = await prisma.restaurant.update({
       where: { id: found.id },
       data: {
@@ -48,7 +46,7 @@ export async function ensureRestaurant({ place }) {
         telephone,
         mapx,
         mapy,
-        category: categoryEnum, // ✅ DB enum 저장
+        category: categoryEnum,
         updatedAt: new Date(),
       },
     });
@@ -63,9 +61,20 @@ export async function ensureRestaurant({ place }) {
       telephone,
       mapx,
       mapy,
-      category: categoryEnum, // ✅ DB enum 저장
+      category: categoryEnum,
     },
   });
 
   return { restaurantId: created.id, restaurant: created };
+}
+
+export async function getRestaurantDetail(restaurantId) {
+  return prisma.restaurant.findUnique({
+    where: { id: restaurantId },
+    include: {
+      // 필요하다면 관계 테이블도 join
+      // reviews: true,
+      // menus: true,
+    },
+  });
 }
