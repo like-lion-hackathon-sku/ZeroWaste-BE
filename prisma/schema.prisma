@@ -96,6 +96,8 @@ model Reviews {
   userId        Int         @map("user_id")
   restaurants   Restaurants @relation(fields: [restaurantsId], references: [id], onDelete: Cascade)
   restaurantsId Int         @map("restaurant_id")
+  contents      String      @db.Text
+  score         Float       @default(0)
   createdAt     DateTime    @default(now()) @map("created_at")
   updatedAt     DateTime    @updatedAt @map("updated_at")
 
