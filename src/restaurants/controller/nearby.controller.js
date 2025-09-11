@@ -2,11 +2,18 @@ import { StatusCodes } from "http-status-codes";
 import { searchLocal } from "../service/naver.service.js";
 import { ensureRestaurant } from "../service/restaurants.service.js";
 import { getRestaurantScore } from "../service/score.service.js";
-import { isRestaurantLike } from "../service/category.mapper.js";
 
-// ✅ 필터/DB 저장을 끌 수 있는 스위치(환경변수)
+// 안전 import: named export가 없을 때를 대비
+import * as Cat from "../service/category.mapper.js";
+
 const SKIP_CATEGORY_FILTER = process.env.SKIP_CATEGORY_FILTER === "1";
 const SKIP_DB_SAVE = process.env.SKIP_DB_SAVE === "1";
+
+// fallback: 필터 없으면 모두 통과시켜서 서비스 죽지 않게
+const safeIsRestaurantLike =
+  typeof Cat.isRestaurantLike === "function"
+    ? Cat.isRestaurantLike
+    : () => true;
 
 export const getNearbyRestaurantsCtrl = async (req, res, next) => {
   try {
@@ -20,29 +27,17 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
     const places = await searchLocal(q, 10);
     const raw = Array.isArray(places) ? places : [];
 
-    console.log(
-      "[nearby] raw:",
-      raw.length,
-      "skipFilter?",
-      SKIP_CATEGORY_FILTER,
-      "skipDb?",
-      SKIP_DB_SAVE,
-    );
-
     const filtered = SKIP_CATEGORY_FILTER
       ? raw
       : raw.filter((p) => {
           try {
-            return isRestaurantLike(p?.category, p?.name);
-          } catch (e) {
-            console.warn("[nearby] filter error:", e?.message, p);
-            return false;
-          }
+            return safeIsRestaurantLike(p?.category, p?.name);
+          } catch {
+            return true;
+          } // 필터 에러 시 통과
         });
 
-    console.log("[nearby] filtered:", filtered.length);
-
-    // 중복제거
+    // 중복 제거 (이름+주소)
     const uniq = [];
     const seen = new Set();
     for (const p of filtered) {
@@ -52,7 +47,6 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
       uniq.push(p);
     }
 
-    // ✅ DB 저장이 원인인지 분리 확인
     if (SKIP_DB_SAVE) {
       return res.status(StatusCodes.OK).json({
         resultType: "SUCCESS",
@@ -78,7 +72,6 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
           name: p?.name,
           addr: p?.address,
         });
-        // 문제 항목은 건너뛰고 계속
       }
     }
 
@@ -88,7 +81,7 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
       success: { items },
     });
   } catch (e) {
-    console.error("[nearby] fatal:", e?.stack || e);
+    console.error("[nearby] fatal:", e);
     next(e);
   }
 };

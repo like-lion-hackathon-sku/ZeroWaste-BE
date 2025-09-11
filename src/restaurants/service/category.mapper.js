@@ -1,4 +1,5 @@
-// 네이버 cat/name → (1) 식당계열 판별, (2) DB enum(FoodCategory) 매핑
+// ✅ 반드시 이 파일명/경로 그대로: src/restaurants/service/category.mapper.js
+// ✅ named export: isRestaurantLike, toFoodCategory
 
 const KR = [
   "음식점",
@@ -194,27 +195,6 @@ const CAFE_DESSERT = [
   "쇼콜라티에",
   "브런치카페",
 ];
-const PUB_BAR = [
-  "술집",
-  "주점",
-  "포차",
-  "포장마차",
-  "호프",
-  "펍",
-  "바",
-  "와인바",
-  "칵테일바",
-  "사케바",
-  "위스키바",
-  "수제맥주",
-  "맥주집",
-  "펍하우스",
-  "브루어리",
-  "양조장",
-  "전통주",
-  "막걸리집",
-  "이자카야",
-];
 const MISC = [
   "뷔페",
   "패스트푸드",
@@ -299,7 +279,6 @@ const ALL_WHITELIST = [
     ...ASIAN,
     ...MIDEAST_LATAM,
     ...CAFE_DESSERT,
-    ...PUB_BAR,
     ...MISC,
   ]),
 ];
@@ -310,7 +289,7 @@ const hasAny = (s = "", arr = []) => {
   return arr.some((t) => n.includes(norm(t)));
 };
 
-/** (1) 음식점/카페 계열 1차 판별: 검색 결과 필터용 */
+// (1) 검색결과 1차 필터: 음식점/카페 계열?
 export function isRestaurantLike(cat = "", name = "") {
   if (hasAny(cat, RESTAURANT_BLACK) || hasAny(name, RESTAURANT_BLACK))
     return false;
@@ -319,7 +298,7 @@ export function isRestaurantLike(cat = "", name = "") {
   return c.includes("음식점") || c.includes("카페") || c.includes("주점");
 }
 
-/** (2) DB enum(FoodCategory) 매핑: KOREAN/JAPANESE/CHINESE/WESTERN/FASTFOOD/CAFE/ETC */
+// (2) DB enum 매핑: FoodCategory
 export function toFoodCategory(cat = "", name = "") {
   if (hasAny(cat, CAFE_DESSERT) || hasAny(name, CAFE_DESSERT)) return "CAFE";
   if (
@@ -339,12 +318,10 @@ export function toFoodCategory(cat = "", name = "") {
   if (hasAny(cat, CN) || hasAny(name, CN)) return "CHINESE";
   if (hasAny(cat, WEST) || hasAny(name, WEST)) return "WESTERN";
   if (hasAny(cat, KR) || hasAny(name, KR)) return "KOREAN";
-
-  // 보정 규칙 (원하면 ETC로 바꿔도 됨)
+  // 보정 규칙(원하면 ETC로 바꿔도 됨)
   if (hasAny(cat, SEAFOOD) || hasAny(name, SEAFOOD)) return "KOREAN";
   if (hasAny(cat, ASIAN) || hasAny(name, ASIAN)) return "WESTERN";
   if (hasAny(cat, MIDEAST_LATAM) || hasAny(name, MIDEAST_LATAM))
     return "WESTERN";
-
   return "ETC";
 }
