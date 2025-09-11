@@ -1,5 +1,4 @@
-// 위치: src/restaurants/service/category.service.js
-// 식당 카테고리를 DB와 매핑해주는 코드입니다.
+// 공통 카테고리 매퍼: 네이버 결과(cat/name) → FoodCategory(enum: 문자열)
 
 const KR = [
   "음식점",
