@@ -63,43 +63,58 @@ function normalizePlacePayload(place = {}) {
 }
 
 /** 외부 장소 동기화(멱등) */
-export async function syncExternalPlace(placePayload) {
-  const p = normalizePlacePayload(placePayload);
-  const byNA = await restRepo.findByNameAddress(p.name, p.address);
-  if (byNA) return { restaurantId: byNA.id, created: false };
-  const created = await restRepo.create({ ...p, isSponsored: false });
-  return { restaurantId: created.id, created: true };
-}
-
-/** 식당 보장: id 또는 외부 place 로 생성/찾기 */
 export async function ensureRestaurant({ place }) {
-  const category = toFoodCategoryEnum(place.category, place.name); // ✅ 고침
+  const category = toFoodCategoryEnum(place.category, place.name);
 
-  const restaurant = await prisma.restaurant.upsert({
+  // 1) name + address 기준으로 먼저 찾기
+  let found = await prisma.restaurants.findFirst({
     where: {
-      // 전화번호+좌표 조합으로 유니크 판단한다고 가정
-      unique_key: {
-        telephone: place.telephone ?? "",
-        mapx: place.mapx,
-        mapy: place.mapy,
-      },
-    },
-    update: {
       name: place.name,
       address: place.address,
-      category,
-    },
-    create: {
-      name: place.name,
-      address: place.address,
-      telephone: place.telephone,
-      category,
-      mapx: place.mapx,
-      mapy: place.mapy,
     },
   });
 
-  return restaurant;
+  // 2) 못 찾으면 전화번호 + 좌표 기준으로 보조 검색
+  if (!found && (place.telephone || (place.mapx && place.mapy))) {
+    found = await prisma.restaurants.findFirst({
+      where: {
+        OR: [
+          place.telephone ? { telephone: place.telephone } : undefined,
+          place.mapx && place.mapy
+            ? { AND: [{ mapx: place.mapx }, { mapy: place.mapy }] }
+            : undefined,
+        ].filter(Boolean),
+      },
+    });
+  }
+
+  if (found) {
+    const updated = await prisma.restaurants.update({
+      where: { id: found.id },
+      data: {
+        name: place.name,
+        address: place.address,
+        telephone: place.telephone,
+        mapx: place.mapx,
+        mapy: place.mapy,
+        category,
+      },
+    });
+    return { restaurantId: updated.id, restaurant: updated };
+  }
+
+  const created = await prisma.restaurants.create({
+    data: {
+      name: place.name,
+      address: place.address,
+      telephone: place.telephone,
+      mapx: place.mapx,
+      mapy: place.mapy,
+      category,
+    },
+  });
+
+  return { restaurantId: created.id, restaurant: created };
 }
 
 /** DB 상세 + 즐겨찾기 여부 */
