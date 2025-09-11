@@ -12,6 +12,8 @@ import {
 
 const r = Router();
 
+r.use(authenticateAccessToken, verifyUserIsActive);
+
 /* restaurantId 파라미터 검증 함수
  * restaurantId가 숫자가 아니면 404 응답
  */
