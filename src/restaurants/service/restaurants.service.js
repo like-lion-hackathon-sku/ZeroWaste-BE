@@ -1,8 +1,12 @@
+import pkg from "../../generated/prisma/index.js";
+const { PrismaClient } = pkg;
+const prisma = new PrismaClient();
+
 import * as restRepo from "../repository/restaurants.repository.js";
 
 /** 카테고리 문자열 → ENUM 매핑 */
-function toFoodCategoryEnum(input) {
-  const s = String(input || "").toLowerCase();
+function toFoodCategoryEnum(input, name = "") {
+  const s = String(input || name || "").toLowerCase();
   const pairs = [
     ["한식", "KOREAN"],
     ["korean", "KOREAN"],
@@ -49,7 +53,7 @@ function normalizePlacePayload(place = {}) {
   return {
     name: String(name).trim(),
     address: String(address).trim(),
-    category: toFoodCategoryEnum(category),
+    category: toFoodCategoryEnum(category, name), // ✅ 여기서 enum 매핑
     telephone: String(telephone ?? "")
       .trim()
       .slice(0, 15),
@@ -69,7 +73,7 @@ export async function syncExternalPlace(placePayload) {
 
 /** 식당 보장: id 또는 외부 place 로 생성/찾기 */
 export async function ensureRestaurant({ place }) {
-  const category = toFoodCategory(place.category, place.name);
+  const category = toFoodCategoryEnum(place.category, place.name); // ✅ 고침
 
   const restaurant = await prisma.restaurant.upsert({
     where: {
@@ -83,13 +87,13 @@ export async function ensureRestaurant({ place }) {
     update: {
       name: place.name,
       address: place.address,
-      category, // ✅ 매핑된 enum 저장
+      category,
     },
     create: {
       name: place.name,
       address: place.address,
       telephone: place.telephone,
-      category, // ✅ 매핑된 enum 저장
+      category,
       mapx: place.mapx,
       mapy: place.mapy,
     },
