@@ -12,8 +12,6 @@ import {
 
 const r = Router();
 
-r.use(authenticateAccessToken, verifyUserIsActive);
-
 /* restaurantId 파라미터 검증 함수
  * restaurantId가 숫자가 아니면 404 응답
  */
@@ -26,22 +24,27 @@ function onlyDigits404(req, res, next) {
 }
 
 /* 즐겨찾기 조회 라우터
- * 매서드: GET
+ * 메서드: GET
  * 엔드포인트: /api/favorites
  */
-r.get("/", listMyFavoritesCtrl);
+r.get("/", authenticateAccessToken, verifyUserIsActive, listMyFavoritesCtrl);
 
 /* 즐겨찾기 추가 라우터
- * 매서드: PUT
+ * 메서드: PUT
  * 엔드포인트: /api/favorites
  */
-
-r.put("/", upsertFavorite);
+r.put("/", authenticateAccessToken, verifyUserIsActive, upsertFavorite);
 
 /* 즐겨찾기 삭제 라우터
- * 매서드: PUT
- * 엔드포인트: /api/favorites/delete
+ * 메서드: DELETE
+ * 엔드포인트: /api/favorites/:restaurantId
  */
-r.delete("/:restaurantId", onlyDigits404, removeFavoriteById);
+r.delete(
+  "/:restaurantId",
+  authenticateAccessToken,
+  verifyUserIsActive,
+  onlyDigits404,
+  removeFavoriteById,
+);
 
 export default r;
