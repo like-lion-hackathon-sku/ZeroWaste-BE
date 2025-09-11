@@ -68,22 +68,34 @@ export async function syncExternalPlace(placePayload) {
 }
 
 /** 식당 보장: id 또는 외부 place 로 생성/찾기 */
-export async function ensureRestaurant({ restaurantId, place }) {
-  if (restaurantId == null && !place) {
-    const err = new Error("RESTAURANT_ID_OR_PLACE_REQUIRED");
-    err.status = 400;
-    throw err;
-  }
-  if (restaurantId != null) {
-    const found = await restRepo.findById(restaurantId);
-    if (found) return { restaurantId, created: false };
-    if (!place) {
-      const err = new Error("RESTAURANT_NOT_FOUND");
-      err.status = 404;
-      throw err;
-    }
-  }
-  return await syncExternalPlace(place);
+export async function ensureRestaurant({ place }) {
+  const category = toFoodCategory(place.category, place.name);
+
+  const restaurant = await prisma.restaurant.upsert({
+    where: {
+      // 전화번호+좌표 조합으로 유니크 판단한다고 가정
+      unique_key: {
+        telephone: place.telephone ?? "",
+        mapx: place.mapx,
+        mapy: place.mapy,
+      },
+    },
+    update: {
+      name: place.name,
+      address: place.address,
+      category, // ✅ 매핑된 enum 저장
+    },
+    create: {
+      name: place.name,
+      address: place.address,
+      telephone: place.telephone,
+      category, // ✅ 매핑된 enum 저장
+      mapx: place.mapx,
+      mapy: place.mapy,
+    },
+  });
+
+  return restaurant;
 }
 
 /** DB 상세 + 즐겨찾기 여부 */
