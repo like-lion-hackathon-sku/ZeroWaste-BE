@@ -1,3 +1,4 @@
+// 위치: src/favorites/service/favorites.service.js
 import * as favRepo from "../repository/favorites.repository.js";
 import * as restSvc from "../../restaurants/service/restaurants.service.js";
 import * as restRepo from "../../restaurants/repository/restaurants.repository.js";
