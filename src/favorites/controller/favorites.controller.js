@@ -9,14 +9,7 @@ import { StatusCodes } from "http-status-codes";
 /** 즐겨찾기 목록 */
 export const listMyFavoritesCtrl = async (req, res, next) => {
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({
-        resultType: "FAIL",
-        error: { code: "UNAUTHORIZED" },
-        success: null,
-      });
-    }
+    const userId = req.user.id;
 
     // page/size를 숫자로 정규화
     const pageRaw = req.query.page ?? 1;
@@ -40,14 +33,7 @@ export const listMyFavoritesCtrl = async (req, res, next) => {
 /** 즐겨찾기 추가(멱등) */
 export const upsertFavorite = async (req, res, next) => {
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({
-        resultType: "FAIL",
-        error: { code: "UNAUTHORIZED" },
-        success: null,
-      });
-    }
+    const userId = req.user.id;
     const { restaurantId, place } = req.body ?? {};
     const result = await addFavorite({ userId, restaurantId, place });
 
@@ -65,14 +51,7 @@ export const upsertFavorite = async (req, res, next) => {
 /** 즐겨찾기 삭제 */
 export const removeFavoriteById = async (req, res, next) => {
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({
-        resultType: "FAIL",
-        error: { code: "UNAUTHORIZED" },
-        success: null,
-      });
-    }
+    const userId = req.user.id;
     const restaurantId = Number(req.params.restaurantId);
 
     await removeFavorite(userId, restaurantId);
