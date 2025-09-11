@@ -1,366 +1,32 @@
-// 위치: src/restaurants/controller/nearby.controller.js
 import { StatusCodes } from "http-status-codes";
 import { searchLocal } from "../service/naver.service.js";
 import { ensureRestaurant } from "../service/restaurants.service.js";
 import { getRestaurantScore } from "../service/score.service.js";
+import { isRestaurantLike } from "../service/category.mapper.js"; // ✅ 카테고리 판별 유틸
 
-// 넓은 범위 화이트리스트 (음식점/카페/주점 계열 전부)
-const KR = [
-  "음식점",
-  "식당",
-  "분식",
-  "백반",
-  "국밥",
-  "찌개",
-  "전골",
-  "해장국",
-  "감자탕",
-  "칼국수",
-  "냉면",
-  "국수",
-  "보쌈",
-  "족발",
-  "순대",
-  "곱창",
-  "막창",
-  "대창",
-  "닭갈비",
-  "닭발",
-  "닭꼬치",
-  "닭한마리",
-  "삼계탕",
-  "삼겹살",
-  "고기구이",
-  "돼지갈비",
-  "갈비",
-  "불고기",
-  "제육",
-  "한정식",
-  "전",
-  "파전",
-  "빈대떡",
-  "해물파전",
-  "쌈밥",
-  "죽",
-  "도시락",
-  "수제비",
-  "김밥",
-  "떡볶이",
-  "튀김",
-  "라면",
-  "분식집",
-  "해물탕",
-  "아귀찜",
-  "찜닭",
-  "곰탕",
-  "설렁탕",
-  "곰치국",
-  "샤브샤브",
-  "비빔밥",
-  "쭈꾸미",
-  "낙지",
-  "꼼장어",
-  "장어",
-  "곱도리탕",
-];
-
-const JP = [
-  "일식",
-  "일본식",
-  "스시",
-  "초밥",
-  "사시미",
-  "라멘",
-  "라면",
-  "우동",
-  "소바",
-  "규카츠",
-  "돈카츠",
-  "돈까스",
-  "덮밥",
-  "돈부리",
-  "오꼬노미야끼",
-  "타코야끼",
-  "이자카야",
-  "오마카세",
-  "텐동",
-  "텐푸라",
-  "규동",
-];
-
-const CN = [
-  "중식",
-  "중화요리",
-  "짜장면",
-  "자장면",
-  "짬뽕",
-  "우동(중식)",
-  "볶음밥",
-  "탕수육",
-  "깐풍기",
-  "양꼬치",
-  "마라탕",
-  "마라샹궈",
-  "훠궈",
-  "훠궈집",
-  "중국냉면",
-  "딤섬",
-  "홍콩요리",
-  "사천요리",
-];
-
-const WEST = [
-  "양식",
-  "서양식",
-  "스테이크",
-  "파스타",
-  "리조또",
-  "그릴",
-  "바베큐",
-  "BBQ",
-  "브런치",
-  "샐러드",
-  "수제버거",
-  "버거",
-  "피자",
-  "그리스",
-  "터키",
-  "케밥",
-  "프렌치",
-  "이탈리아",
-  "이탈리안",
-];
-
-const SEAFOOD = [
-  "해산물",
-  "수산물",
-  "횟집",
-  "회",
-  "초밥",
-  "물회",
-  "조개구이",
-  "대게",
-  "킹크랩",
-  "랍스터",
-  "매운탕",
-  "생선구이",
-];
-
-const ASIAN = [
-  "아시아음식",
-  "동남아",
-  "베트남",
-  "쌀국수",
-  "분짜",
-  "반미",
-  "태국",
-  "팟타이",
-  "똠얌",
-  "인도",
-  "커리",
-  "탄두리",
-  "난",
-  "네팔",
-  "파키스탄",
-  "말레이시아",
-  "싱가포르",
-  "인도네시아",
-];
-
-const MIDEAST_LATAM = [
-  "중동",
-  "레바논",
-  "이스라엘",
-  "페르시안",
-  "멕시코",
-  "타코",
-  "부리또",
-  "퀘사디야",
-  "나초",
-  "브라질",
-  "슈하스코",
-  "스페인",
-  "타파스",
-];
-
-const CAFE_DESSERT = [
-  "카페",
-  "커피",
-  "커피전문점",
-  "디저트",
-  "베이커리",
-  "빵",
-  "제과",
-  "제빵",
-  "도넛",
-  "도너츠",
-  "아이스크림",
-  "빙수",
-  "케이크",
-  "타르트",
-  "마카롱",
-  "와플",
-  "크로와상",
-  "티룸",
-  "초콜릿",
-  "쇼콜라티에",
-  "브런치카페",
-];
-
-const PUB_BAR = [
-  "술집",
-  "주점",
-  "포차",
-  "포장마차",
-  "호프",
-  "펍",
-  "바",
-  "와인바",
-  "칵테일바",
-  "사케바",
-  "위스키바",
-  "수제맥주",
-  "맥주집",
-  "펍하우스",
-  "브루어리",
-  "양조장",
-  "전통주",
-  "막걸리집",
-  "이자카야",
-];
-
-const MISC = [
-  "뷔페",
-  "패스트푸드",
-  "샌드위치",
-  "샤브샤브",
-  "뷔폐",
-  "푸드트럭",
-  "키친",
-  "다이너",
-];
-
-// 최종 화이트리스트 (중복 제거)
-export const RESTAURANT_CATS = [
-  ...new Set([
-    ...KR,
-    ...JP,
-    ...CN,
-    ...WEST,
-    ...SEAFOOD,
-    ...ASIAN,
-    ...MIDEAST_LATAM,
-    ...CAFE_DESSERT,
-    ...PUB_BAR,
-    ...MISC,
-  ]),
-];
-
-// 명확 제외(블랙리스트): 음식점 아님
-const RESTAURANT_BLACK = [
-  "병원",
-  "의원",
-  "약국",
-  "한의원",
-  "치과",
-  "내과",
-  "피부과",
-  "안과",
-  "정형외과",
-  "산부인과",
-  "학원",
-  "독서실",
-  "서점",
-  "문구",
-  "편의점",
-  "마트",
-  "슈퍼",
-  "백화점",
-  "아울렛",
-  "은행",
-  "ATM",
-  "보험",
-  "부동산",
-  "헬스장",
-  "피트니스",
-  "요가",
-  "필라테스",
-  "미용실",
-  "헤어",
-  "네일",
-  "왁싱",
-  "스파",
-  "피부관리",
-  "마사지",
-  "호텔",
-  "모텔",
-  "숙박",
-  "게스트하우스",
-  "펜션",
-  "리조트",
-  "카센터",
-  "정비",
-  "주유소",
-  "세차장",
-  "세탁소",
-  "동물병원",
-  "애견",
-  "애묘",
-  "반려동물",
-  "관공서",
-  "우체국",
-  "파출소",
-  "경찰서",
-  "소방서",
-  "학교",
-  "유치원",
-  "초등학교",
-  "중학교",
-  "고등학교",
-  "대학교",
-];
-
-// 유틸
-const norm = (s = "") => String(s).replace(/\s+/g, " ").trim().toLowerCase();
-const hasAny = (s, arr) => {
-  const n = norm(s);
-  return arr.some((t) => n.includes(norm(t)));
-};
-
-// 최종 판별 함수
-export function isRestaurantCategory(cat = "", name = "") {
-  // 1) 블랙리스트 우선 차단
-  if (hasAny(cat, RESTAURANT_BLACK) || hasAny(name, RESTAURANT_BLACK))
-    return false;
-  // 2) 화이트리스트(카테고리/이름 둘 다 체크)
-  if (hasAny(cat, RESTAURANT_CATS) || hasAny(name, RESTAURANT_CATS))
-    return true;
-  // 3) 네이버 기본 상위 토큰 안전망
-  return (
-    norm(cat).includes("음식점") ||
-    norm(cat).includes("카페") ||
-    norm(cat).includes("주점")
-  );
-}
-
+// GET /api/restaurants/nearby?q=키워드
 export const getNearbyRestaurantsCtrl = async (req, res, next) => {
   try {
     const { q } = req.query;
-    if (!q) return res.status(400).json({ error: "QUERY_REQUIRED" });
+    if (!q) {
+      return res
+        .status(StatusCodes.BAD_REQUEST)
+        .json({ resultType: "FAIL", error: "QUERY_REQUIRED", success: null });
+    }
 
-    // 1) 네이버 검색 (필요시 개수 조절)
+    // 1) 네이버 검색 (필요 시 개수 조절 가능)
     const places = await searchLocal(q, 10);
 
-    // 2) 식당/카페 등만 통과
-    const filtered = places.filter((p) =>
-      isRestaurantCategory(p?.category, p?.name),
+    // 2) 음식점/카페 계열만 필터링
+    const filtered = (places ?? []).filter((p) =>
+      isRestaurantLike(p?.category, p?.name),
     );
 
-    // 3) 이름+주소 기준 중복 제거 (네이버가 같은 항목을 중복 반환하는 경우 방지)
+    // 3) 이름+주소 기준 중복 제거
     const uniq = [];
     const seen = new Set();
     for (const p of filtered) {
-      const key = `${p.name}__${p.address}`;
+      const key = `${p?.name ?? ""}__${p?.address ?? ""}`;
       if (seen.has(key)) continue;
       seen.add(key);
       uniq.push(p);
@@ -369,7 +35,7 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
     // 4) DB 멱등 확보 + 점수 조인
     const items = [];
     for (const p of uniq) {
-      const { restaurantId } = await ensureRestaurant({ place: p });
+      const { restaurantId } = await ensureRestaurant({ place: p }); // ✅ 내부에서 FoodCategory 매핑 후 저장
       const score = await getRestaurantScore(restaurantId);
       items.push({ restaurantId, ...p, score });
     }
