@@ -2,9 +2,12 @@ import { StatusCodes } from "http-status-codes";
 import { searchLocal } from "../service/naver.service.js";
 import { ensureRestaurant } from "../service/restaurants.service.js";
 import { getRestaurantScore } from "../service/score.service.js";
-import { isRestaurantLike } from "../service/category.mapper.js"; // ✅ 카테고리 판별 유틸
+import { isRestaurantLike } from "../service/category.mapper.js";
 
-// GET /api/restaurants/nearby?q=키워드
+// ✅ 필터/DB 저장을 끌 수 있는 스위치(환경변수)
+const SKIP_CATEGORY_FILTER = process.env.SKIP_CATEGORY_FILTER === "1";
+const SKIP_DB_SAVE = process.env.SKIP_DB_SAVE === "1";
+
 export const getNearbyRestaurantsCtrl = async (req, res, next) => {
   try {
     const { q } = req.query;
@@ -14,15 +17,32 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
         .json({ resultType: "FAIL", error: "QUERY_REQUIRED", success: null });
     }
 
-    // 1) 네이버 검색 (필요 시 개수 조절 가능)
     const places = await searchLocal(q, 10);
+    const raw = Array.isArray(places) ? places : [];
 
-    // 2) 음식점/카페 계열만 필터링
-    const filtered = (places ?? []).filter((p) =>
-      isRestaurantLike(p?.category, p?.name),
+    console.log(
+      "[nearby] raw:",
+      raw.length,
+      "skipFilter?",
+      SKIP_CATEGORY_FILTER,
+      "skipDb?",
+      SKIP_DB_SAVE,
     );
 
-    // 3) 이름+주소 기준 중복 제거
+    const filtered = SKIP_CATEGORY_FILTER
+      ? raw
+      : raw.filter((p) => {
+          try {
+            return isRestaurantLike(p?.category, p?.name);
+          } catch (e) {
+            console.warn("[nearby] filter error:", e?.message, p);
+            return false;
+          }
+        });
+
+    console.log("[nearby] filtered:", filtered.length);
+
+    // 중복제거
     const uniq = [];
     const seen = new Set();
     for (const p of filtered) {
@@ -32,12 +52,34 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
       uniq.push(p);
     }
 
-    // 4) DB 멱등 확보 + 점수 조인
+    // ✅ DB 저장이 원인인지 분리 확인
+    if (SKIP_DB_SAVE) {
+      return res.status(StatusCodes.OK).json({
+        resultType: "SUCCESS",
+        error: null,
+        success: {
+          items: uniq.map((p, i) => ({
+            restaurantId: 0 - i,
+            ...p,
+            score: null,
+          })),
+        },
+      });
+    }
+
     const items = [];
     for (const p of uniq) {
-      const { restaurantId } = await ensureRestaurant({ place: p }); // ✅ 내부에서 FoodCategory 매핑 후 저장
-      const score = await getRestaurantScore(restaurantId);
-      items.push({ restaurantId, ...p, score });
+      try {
+        const { restaurantId } = await ensureRestaurant({ place: p });
+        const score = await getRestaurantScore(restaurantId);
+        items.push({ restaurantId, ...p, score });
+      } catch (e) {
+        console.error("[nearby] per-item error:", e?.message, {
+          name: p?.name,
+          addr: p?.address,
+        });
+        // 문제 항목은 건너뛰고 계속
+      }
     }
 
     return res.status(StatusCodes.OK).json({
@@ -46,6 +88,7 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
       success: { items },
     });
   } catch (e) {
+    console.error("[nearby] fatal:", e?.stack || e);
     next(e);
   }
 };
