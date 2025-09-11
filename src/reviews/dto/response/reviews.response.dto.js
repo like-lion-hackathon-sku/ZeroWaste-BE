@@ -14,6 +14,7 @@ export const mapReview = (review) => {
     userId: review.userId,
     contents: review.contents,
     score: review.score,
+    created_at: review.createdAt,
   };
 };
 
@@ -34,5 +35,6 @@ export const mapMyReview = (review) => {
     nickname: review.user?.nickname,
     contents: review.contents,
     score: review.score,
-  }
-}
+    created_at: review.createdAt,
+  };
+};
