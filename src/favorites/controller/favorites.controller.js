@@ -5,6 +5,8 @@ import {
   listMyFavorites,
 } from "../service/favorites.service.js";
 import { StatusCodes } from "http-status-codes";
+import { getReqUserId } from "../../utils/request-user.js";
+const userId = getReqUserId(req);
 
 /** 즐겨찾기 목록 */
 export const listMyFavoritesCtrl = async (req, res, next) => {
