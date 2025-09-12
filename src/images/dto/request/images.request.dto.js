@@ -1,4 +1,14 @@
 // 위치: src/images/dto/request/images.request.dto.js
+export const imagesUploadRequestDto = ({ params, file }) => {
+  return {
+    type: params.imageType,
+    originalName: file?.originalname,
+    mimeType: file?.mimetype,
+    buffer: file?.buffer,
+    size: file?.size,
+  };
+};
+
 export const imagesLoadRequestDto = (params) => {
   return {
     type: params.imageType,
