@@ -3,9 +3,51 @@ import { StatusCodes } from "http-status-codes";
 import {
   imagesLoadRequestDto,
   imagesAnalyzeRequestDto,
+  imagesUploadRequestDto,
 } from "../dto/request/images.request.dto.js";
-import { loadImageData, analyzeImageData } from "../service/images.service.js";
+import {
+  loadImageData,
+  analyzeImageData,
+  uploadImageData,
+} from "../service/images.service.js";
 
+/* 업로드 */
+export const handleUploadImage = async (req, res, next) => {
+  /*
+    #swagger.summary = "이미지 업로드"
+    #swagger.tags = ["Images"]
+    #swagger.consumes = ["multipart/form-data"]
+    #swagger.parameters['imageType'] = { in:"path", required:true, example:"review" }
+    #swagger.parameters['file'] = {
+      in: 'formData', name: 'file', type: 'file', required: true,
+      description: '업로드할 이미지 파일 (jpg/jpeg/png/webp)'
+    }
+    #swagger.responses[201] = {
+      description: "업로드 성공",
+      schema: {
+        type: "object",
+        properties: {
+          ok: { type: "boolean" },
+          type: { type: "string" },
+          fileName: { type: "string" },
+          url: { type: "string" }
+        }
+      }
+    }
+  */
+  try {
+    const dto = imagesUploadRequestDto({
+      params: req.params,
+      file: req.file,
+    });
+    const result = await uploadImageData(dto);
+    return res.status(StatusCodes.CREATED).json({ ok: true, ...result });
+  } catch (e) {
+    next(e);
+  }
+};
+
+/* 로드 */
 export const handleLoadImage = async (req, res, next) => {
   /*
     #swagger.summary = "이미지 로드"
@@ -24,13 +66,14 @@ export const handleLoadImage = async (req, res, next) => {
   }
 };
 
+/* 분석 */
 export const handleAnalyzeImage = async (req, res, next) => {
   /*
     #swagger.summary = "이미지 잔반 분석"
     #swagger.tags = ["Images"]
     #swagger.description = "업로드된 이미지를 OpenAI로 분석하여 잔반 점수와 한줄평을 반환합니다."
-    #swagger.parameters["imageType"] = { in:"path", description:"이미지 타입 (profile, review)", required : true, example: "review" }
-    #swagger.parameters["fileName"] = { in:"path", description:"이미지 파일 이름", required : true, example: "meal-123.jpeg" }
+    #swagger.parameters["imageType"] = { in:"path", required:true, example:"review" }
+    #swagger.parameters["fileName"] = { in:"path", required:true, example:"meal-123.jpeg" }
     #swagger.responses[200] = {
       description: "분석 성공",
       schema: {
