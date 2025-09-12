@@ -6,10 +6,12 @@ dotenv.config();
 import { tokenBridge } from "./auth/middleware/token-bridge.middleware.js";
 import { payloadUserBridge } from "./auth/middleware/payload-user-bridge.middleware.js";
 import { logAuth } from "./_debug/log-auth.middleware.js";
+import { logRoute } from "./_debug/log-route.middleware.js";
 const app = setupExpress();
 const port = process.env.PORT;
 
 setupSwagger(app);
+app.use(logRoute);
 app.use(logAuth);
 app.use(tokenBridge);
 app.use(payloadUserBridge);
