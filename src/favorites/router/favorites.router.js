@@ -30,5 +30,10 @@ r.get("/", listMyFavoritesCtrl);
 r.post("/", upsertFavorite); // ✅ POST 허용
 r.put("/", upsertFavorite); // (PUT도 유지)
 r.delete("/:restaurantId", onlyDigits404, removeFavoriteById);
-
+r.get(
+  "/:restaurantId/reviews",
+  identifyAccessToken,
+  onlyDigits404,
+  listRestaurantReviewsCtrl,
+);
 export default r;
