@@ -1,17 +1,18 @@
 // 위치: src/favorites/controller/favorites.controller.js
+// 위치: src/favorites/controller/favorites.controller.js
 import {
   addFavorite,
   removeFavorite,
   listMyFavorites,
 } from "../service/favorites.service.js";
 import { StatusCodes } from "http-status-codes";
-import { getReqUserId } from "../../utils/request-user.js";
-const userId = getReqUserId(req);
+
+// ❌ const userId = getReqUserId(req);  // 전역에서 req 사용 금지 → 삭제
 
 /** 즐겨찾기 목록 */
 export const listMyFavoritesCtrl = async (req, res, next) => {
   try {
-    const userId = req.user?.id; // ★ 통일된 접근 방식
+    const userId = req.user?.id; // payload-user-bridge 사용 시 OK
     if (!userId) throw new Error("NO_USER_ID");
 
     const page =
@@ -49,7 +50,6 @@ export const upsertFavorite = async (req, res, next) => {
 
     if (typeof res.success === "function")
       return res.success(result, StatusCodes.OK);
-
     return res
       .status(StatusCodes.OK)
       .json({ resultType: "SUCCESS", error: null, success: result });
@@ -70,12 +70,10 @@ export const removeFavoriteById = async (req, res, next) => {
       });
     }
     const restaurantId = Number(req.params.restaurantId);
-
     await removeFavorite(userId, restaurantId);
 
     if (typeof res.success === "function")
       return res.success(true, StatusCodes.OK);
-
     return res
       .status(StatusCodes.OK)
       .json({ resultType: "SUCCESS", error: null, success: true });
