@@ -282,3 +282,13 @@ export class PermissionDeniedError extends Error {
     this.data = data;
   }
 }
+
+export class BadRequestError extends Error {
+  constructor(message = "잘못된 요청입니다.", data = null) {
+    super(message);
+    this.name = "BadRequestError";
+    this.status = 400; // express 에러 핸들러에서 사용
+    this.errorCode = "B400"; // (프로젝트 포맷이 있으면 거기에 맞게)
+    this.data = data;
+  }
+}
