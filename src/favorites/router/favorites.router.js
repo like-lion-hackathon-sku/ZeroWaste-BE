@@ -1,4 +1,4 @@
-// 위치: src/favorites/router/favorites.router.js
+// 위치: src / favorites / router / favorites.router.js
 import { Router } from "express";
 import {
   upsertFavorite,
