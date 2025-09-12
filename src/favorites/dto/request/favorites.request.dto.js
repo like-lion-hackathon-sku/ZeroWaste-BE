@@ -1,68 +1,59 @@
-치: src / favorites / controller / favorites.controller.js;
-import {
-  addFavorite,
-  removeFavorite,
-  listMyFavorites,
-} from "../service/favorites.service.js";
-import { StatusCodes } from "http-status-codes";
+// 즐겨찾기 Request DTO (순수 JS, 가벼운 검증 포함)
 
-/** 즐겨찾기 목록 */
-export const listMyFavoritesCtrl = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
+/**
+ * GET /api/favorites?page&size
+ */
+export function parseListFavoritesQuery(query = {}) {
+  const toPosInt = (v, d) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : d;
+  };
+  return {
+    page: toPosInt(query.page, 1),
+    size: toPosInt(query.size, 20),
+  };
+}
 
-    // page/size를 숫자로 정규화
-    const pageRaw = req.query.page ?? 1;
-    const sizeRaw = req.query.size ?? 20;
-    const page = Number.isFinite(+pageRaw) && +pageRaw > 0 ? +pageRaw : 1;
-    const size = Number.isFinite(+sizeRaw) && +sizeRaw > 0 ? +sizeRaw : 20;
+/**
+ * POST /api/favorites
+ * body: { restaurantId:number, place?:string }
+ */
+export function validateUpsertFavoriteBody(body = {}) {
+  const errors = [];
 
-    const data = await listMyFavorites(userId, { page, size });
-
-    if (typeof res.success === "function")
-      return res.success(data, StatusCodes.OK);
-
-    return res
-      .status(StatusCodes.OK)
-      .json({ resultType: "SUCCESS", error: null, success: data });
-  } catch (e) {
-    next(e);
+  // restaurantId 필수/양의 정수
+  const idNum = Number(body.restaurantId);
+  if (!Number.isFinite(idNum) || idNum <= 0) {
+    errors.push("restaurantId must be a positive number");
   }
-};
 
-/** 즐겨찾기 추가(멱등) */
-export const upsertFavorite = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-    const { restaurantId, place } = req.body ?? {};
-    const result = await addFavorite({ userId, restaurantId, place });
-
-    if (typeof res.success === "function")
-      return res.success(result, StatusCodes.OK);
-
-    return res
-      .status(StatusCodes.OK)
-      .json({ resultType: "SUCCESS", error: null, success: result });
-  } catch (e) {
-    next(e);
+  // place는 선택 문자열
+  if (body.place != null && typeof body.place !== "string") {
+    errors.push("place must be a string if provided");
   }
-};
 
-/** 즐겨찾기 삭제 */
-export const removeFavoriteById = async (req, res, next) => {
-  try {
-    const userId = req.user.id;
-    const restaurantId = Number(req.params.restaurantId);
+  return {
+    ok: errors.length === 0,
+    errors,
+    value: {
+      restaurantId:
+        Number.isFinite(idNum) && idNum > 0 ? Math.floor(idNum) : null,
+      place: typeof body.place === "string" ? body.place : undefined,
+    },
+  };
+}
 
-    await removeFavorite(userId, restaurantId);
-
-    if (typeof res.success === "function")
-      return res.success(true, StatusCodes.OK);
-
-    return res
-      .status(StatusCodes.OK)
-      .json({ resultType: "SUCCESS", error: null, success: true });
-  } catch (e) {
-    next(e);
+/**
+ * DELETE /api/favorites/:restaurantId
+ */
+export function parseRemoveFavoriteParams(params = {}) {
+  const idNum = Number(params.restaurantId);
+  if (!Number.isFinite(idNum) || idNum <= 0) {
+    return {
+      ok: false,
+      error: "restaurantId must be a positive number",
+      value: null,
+    };
   }
-};
+  return { ok: true, error: null, value: { restaurantId: Math.floor(idNum) } };
+}

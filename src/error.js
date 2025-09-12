@@ -120,18 +120,6 @@ export class FileNotFoundError extends Error {
     this.data = data;
   }
 }
-/* 민호 제작
- *
- */
-export class BadRequestError extends Error {
-  constructor(message = "Bad request", meta) {
-    super(message);
-    this.name = "BadRequestError";
-    this.status = 400;
-    this.meta = meta;
-  }
-}
-
 /**
  * **\<💥 Error\>**
  * ***InvalidTokenError***
