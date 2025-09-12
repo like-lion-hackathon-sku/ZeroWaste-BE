@@ -1,31 +1,46 @@
-// 위치: src/favorites/router/favorites.router.js
-import { Router } from "express";
-import {
-  upsertFavorite,
-  removeFavoriteById,
-  listMyFavoritesCtrl,
-} from "../controller/favorites.controller.js";
-import {
-  authenticateAccessToken,
-  verifyUserIsActive,
-} from "../../auth/middleware/auth.middleware.js";
+// 즐겨찾기 Response DTO (통일된 wrapper)
 
-const r = Router();
-
-/* ───────── 공통 유틸 ───────── */
-function onlyDigits404(req, res, next) {
-  const { restaurantId } = req.params;
-  if (restaurantId !== undefined && !/^\d+$/.test(String(restaurantId))) {
-    return res.status(404).json({ ok: false, error: "NOT_FOUND" });
-  }
-  next();
+/**
+ * 공통 응답 래퍼
+ * @template T
+ * @param {"SUCCESS"|"FAILURE"} resultType
+ * @param {T|null} data
+ * @param {string|null} error
+ */
+export function wrap(resultType, data = null, error = null) {
+  return { resultType, error, success: data };
 }
 
-/* ───────── 라우트 ───────── */
-r.get("/", listMyFavoritesCtrl);
+/**
+ * 목록 응답 빌더
+ * @param {Array} items
+ * @param {number} page
+ * @param {number} size
+ * @param {number} totalCount
+ */
+export function buildListFavoritesResponse(items, page, size, totalCount) {
+  return wrap("SUCCESS", { items, page, size, totalCount }, null);
+}
 
-r.put("/", upsertFavorite);
+/**
+ * 업서트 응답 빌더
+ * @param {{id:number, restaurantId:number, createdAt:string}} row
+ */
+export function buildUpsertFavoriteResponse(row) {
+  return wrap("SUCCESS", row, null);
+}
 
-r.delete("/:restaurantId", onlyDigits404, removeFavoriteById);
+/**
+ * 삭제 응답 빌더 (true 고정)
+ */
+export function buildRemoveFavoriteResponse() {
+  return wrap("SUCCESS", true, null);
+}
 
-export default r;
+/**
+ * 에러 응답
+ * @param {string} message
+ */
+export function buildError(message) {
+  return wrap("FAILURE", null, message);
+}
