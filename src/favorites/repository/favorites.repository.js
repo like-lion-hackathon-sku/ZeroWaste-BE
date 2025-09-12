@@ -1,3 +1,4 @@
+// 위치: src / favorites / repository / favorites.repository.js
 import { PrismaClient } from "../../generated/prisma/index.js";
 
 const g = globalThis;
