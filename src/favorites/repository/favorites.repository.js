@@ -124,3 +124,50 @@ export async function reassignFavoritesForUser(userId, fromId, toId) {
 
   return res.count || 0;
 }
+export async function findReviewsByRestaurant(
+  restaurantId,
+  { page, size, sort, rating },
+  ctx = {},
+) {
+  const where = {
+    restaurantsId: restaurantId,
+    ...(rating ? { rating } : {}),
+  };
+
+  const orderBy =
+    sort === "rating"
+      ? [{ rating: "desc" }, { id: "desc" }]
+      : [{ createdAt: "desc" }, { id: "desc" }];
+
+  const skip = (page - 1) * size;
+  const take = size;
+
+  const [total, rows] = await Promise.all([
+    prisma.reviews.count({ where }),
+    prisma.reviews.findMany({
+      where,
+      orderBy,
+      skip,
+      take,
+      include: {
+        users: { select: { id: true, nickname: true, profileImage: true } },
+      },
+    }),
+  ]);
+
+  const items = rows.map((r) => ({
+    id: r.id,
+    restaurantId: restaurantId,
+    user: {
+      id: r.users?.id ?? null,
+      nickname: r.users?.nickname ?? null,
+      profileImage: r.users?.profileImage ?? null,
+    },
+    rating: r.rating,
+    content: r.content,
+    createdAt:
+      r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+  }));
+
+  return { items, pageInfo: { page, size, total } };
+}

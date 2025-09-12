@@ -96,3 +96,32 @@ export const removeFavoriteById = async (req, res, next) => {
     next(e);
   }
 };
+export const listRestaurantReviewsCtrl = async (req, res, next) => {
+  try {
+    const idParsed = parseRestaurantIdParam(req.params);
+    if (!idParsed.ok)
+      return res
+        .status(StatusCodes.BAD_REQUEST)
+        .json(buildError(idParsed.error));
+
+    const q = parseListRestaurantReviewsQuery(req.query);
+    const userId = req.user?.id ?? req.payload?.id ?? null; // 로그인 선택적(필요시 용도에 사용)
+
+    const data = await listReviewsByRestaurant(idParsed.value.restaurantId, q, {
+      userId,
+    });
+
+    return res
+      .status(StatusCodes.OK)
+      .json(
+        buildListRestaurantReviewsResponse(
+          data.items,
+          data.pageInfo.page,
+          data.pageInfo.size,
+          data.pageInfo.total,
+        ),
+      );
+  } catch (e) {
+    next(e);
+  }
+};

@@ -87,3 +87,21 @@ export async function removeFavorite(userId, restaurantId) {
 export async function listMyFavorites(userId, q) {
   return favRepo.findByUser(userId, q);
 }
+export async function listReviewsByRestaurant(
+  restaurantId,
+  { page, size, sort, rating },
+  ctx = {},
+) {
+  // 식당 존재 체크(필요할 때만)
+  const exists = await restRepo.findById?.(restaurantId);
+  if (!exists) {
+    const err = new Error("RESTAURANT_NOT_FOUND");
+    err.status = 404;
+    throw err;
+  }
+  return findReviewsByRestaurant(
+    restaurantId,
+    { page, size, sort, rating },
+    ctx,
+  );
+}

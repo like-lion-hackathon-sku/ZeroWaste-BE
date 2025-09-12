@@ -44,3 +44,19 @@ export function buildRemoveFavoriteResponse() {
 export function buildError(message) {
   return wrap("FAILURE", null, message);
 }
+export function wrap(resultType, data = null, error = null) {
+  return { resultType, error, success: data };
+}
+
+export function buildListRestaurantReviewsResponse(
+  items,
+  page,
+  size,
+  totalCount,
+) {
+  return wrap("SUCCESS", { items, page, size, totalCount }, null);
+}
+
+export function buildError(message) {
+  return wrap("FAILURE", null, message);
+}
