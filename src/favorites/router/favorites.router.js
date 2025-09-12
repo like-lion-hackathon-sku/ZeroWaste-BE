@@ -8,17 +8,14 @@ import {
 import {
   authenticateAccessToken,
   verifyUserIsActive,
-  identifyAccessToken,
 } from "../../auth/middleware/auth.middleware.js";
 
 const r = Router();
 
-// 🔐 이 라우터 아래는 로그인 필수
+// 🔐 즐겨찾기 전체는 로그인 필수
 r.use(authenticateAccessToken, verifyUserIsActive);
 
-/* restaurantId 파라미터 검증 함수
- * restaurantId가 숫자가 아니면 404 응답
- */
+/* restaurantId 파라미터 검증 */
 function onlyDigits404(req, res, next) {
   const { restaurantId } = req.params;
   if (restaurantId !== undefined && !/^\d+$/.test(String(restaurantId))) {
@@ -28,13 +25,8 @@ function onlyDigits404(req, res, next) {
 }
 
 r.get("/", listMyFavoritesCtrl);
-r.post("/", upsertFavorite); // ✅ POST 허용
-r.put("/", upsertFavorite); // (PUT도 유지)
+r.post("/", upsertFavorite); // POST 허용
+r.put("/", upsertFavorite); // PUT도 유지
 r.delete("/:restaurantId", onlyDigits404, removeFavoriteById);
-r.get(
-  "/:restaurantId/reviews",
-  identifyAccessToken,
-  onlyDigits404,
-  listRestaurantReviewsCtrl,
-);
+
 export default r;
