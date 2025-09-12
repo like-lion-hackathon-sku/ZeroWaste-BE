@@ -1,18 +1,14 @@
-// 헤더 Authorization: Bearer ... 를 쿠키 accessToken 으로 브릿지
+// Authorization: Bearer ... 를 req.cookies.accessToken 으로만 복사
 export function tokenBridge(req, res, next) {
   try {
-    // 이미 쿠키에 있으면 건드리지 않음 (기존 로직 존중)
     if (!req?.cookies?.accessToken) {
       const auth = req.headers?.authorization || "";
       if (auth.startsWith("Bearer ")) {
-        const token = auth.slice(7);
-        // req.cookies 객체가 없을 수도 있으니 안전하게
+        const t = auth.slice(7);
         req.cookies = req.cookies || {};
-        req.cookies.accessToken = token; // ★ 기존 미들웨어가 읽는 이름 그대로
+        req.cookies.accessToken = t; // 기존 미들웨어가 읽는 이름 그대로
       }
     }
-  } catch (_) {
-    // 브릿지는 실패해도 인증 미들웨어가 판단하므로 그냥 넘김
-  }
+  } catch {}
   next();
 }

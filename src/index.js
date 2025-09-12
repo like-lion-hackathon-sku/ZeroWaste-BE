@@ -9,6 +9,7 @@ const app = setupExpress();
 const port = process.env.PORT;
 
 setupSwagger(app);
+app.use(tokenBridge);
 app.use("/api", router); // 라우터 설정`
 setupCommonError(app);
 app.listen(port, () => {
