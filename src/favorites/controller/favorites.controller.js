@@ -9,28 +9,22 @@ import { StatusCodes } from "http-status-codes";
 /** 즐겨찾기 목록 */
 export const listMyFavoritesCtrl = async (req, res, next) => {
   try {
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({
-        resultType: "FAILURE",
-        error: "UNAUTHORIZED",
-        success: null,
-      });
-    }
+    const userId = req.user?.id; // ★ 통일된 접근 방식
+    if (!userId) throw new Error("NO_USER_ID");
 
-    // page/size를 숫자로 정규화
-    const pageRaw = req.query.page ?? 1;
-    const sizeRaw = req.query.size ?? 20;
-    const page = Number.isFinite(+pageRaw) && +pageRaw > 0 ? +pageRaw : 1;
-    const size = Number.isFinite(+sizeRaw) && +sizeRaw > 0 ? +sizeRaw : 20;
+    const page =
+      Number.isFinite(+req.query.page) && +req.query.page > 0
+        ? +req.query.page
+        : 1;
+    const size =
+      Number.isFinite(+req.query.size) && +req.query.size > 0
+        ? +req.query.size
+        : 20;
 
     const data = await listMyFavorites(userId, { page, size });
-
-    if (typeof res.success === "function")
-      return res.success(data, StatusCodes.OK);
-
+    if (typeof res.success === "function") return res.success(data, 200);
     return res
-      .status(StatusCodes.OK)
+      .status(200)
       .json({ resultType: "SUCCESS", error: null, success: data });
   } catch (e) {
     next(e);
