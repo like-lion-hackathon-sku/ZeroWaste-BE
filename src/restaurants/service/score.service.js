@@ -1,4 +1,4 @@
-// 위치: src/restaurants/service/score.service.js
+// 위치: src / restaurants / service / score.service.js
 import { PrismaClient } from "../../generated/prisma/index.js";
 
 const g = globalThis;

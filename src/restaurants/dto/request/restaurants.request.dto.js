@@ -1,3 +1,4 @@
+// 위치: src / restaurants / dto / request / restaurants.requsest.dto.js
 /**
  * @typedef RestaurantRequestById
  * @property {number} restaurantId - 이미 DB에 있는 식당 id

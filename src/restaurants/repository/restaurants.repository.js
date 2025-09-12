@@ -1,4 +1,4 @@
-// 위치: src/restaurants/repository/restaurants.repository.js
+// 위치: src / restaurants / repository / restaurants.repository.js
 import { PrismaClient } from "../../generated/prisma/index.js";
 
 const g = globalThis;
