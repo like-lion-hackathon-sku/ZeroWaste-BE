@@ -26,23 +26,9 @@ function onlyDigits404(req, res, next) {
   next();
 }
 
-/* 즐겨찾기 조회 라우터
- * 매서드: GET
- * 엔드포인트: /api/favorites
- */
 r.get("/", listMyFavoritesCtrl);
-
-/* 즐겨찾기 추가 라우터
- * 매서드: PUT
- * 엔드포인트: /api/favorites
- */
-
-r.put("/", upsertFavorite);
-
-/* 즐겨찾기 삭제 라우터
- * 매서드: PUT
- * 엔드포인트: /api/favorites/delete
- */
+r.post("/", upsertFavorite); // ✅ POST 허용
+r.put("/", upsertFavorite); // (PUT도 유지)
 r.delete("/:restaurantId", onlyDigits404, removeFavoriteById);
 
 export default r;

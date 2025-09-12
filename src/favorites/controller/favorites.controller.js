@@ -1,54 +1,73 @@
-// 위치: src/favorites/controller/favorites.controller.js
+// src/favorites/controller/favorites.controller.js
+import { StatusCodes } from "http-status-codes";
 import {
   addFavorite,
   removeFavorite,
   listMyFavorites,
 } from "../service/favorites.service.js";
-import { StatusCodes } from "http-status-codes";
 
-/** 즐겨찾기 목록 */
+// 공통: 안전 정수 변환
+const toPosInt = (v, d) => (Number.isFinite(+v) && +v > 0 ? Math.floor(+v) : d);
+
+/** 목록 */
 export const listMyFavoritesCtrl = async (req, res, next) => {
   try {
-    const userId = req.user.id;
-
-    // page/size를 숫자로 정규화
-    const toPosInt = (v, d) =>
-      Number.isFinite(+v) && +v > 0 ? Math.floor(+v) : d;
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        resultType: "FAILURE",
+        error: "UNAUTHORIZED",
+        success: null,
+      });
+    }
     const page = toPosInt(req.query.page, 1);
     const size = toPosInt(req.query.size, 20);
 
     const data = await listMyFavorites(userId, { page, size });
-
-    if (typeof res.success === "function")
-      return res.success(data, StatusCodes.OK);
-
     return res
       .status(StatusCodes.OK)
       .json({ resultType: "SUCCESS", error: null, success: data });
   } catch (e) {
+    console.error("[FAV][LIST] error:", e); // 👈 원인 출력
     next(e);
   }
 };
 
-/** 즐겨찾기 추가(멱등) */
+/** 추가/업서트 */
 export const upsertFavorite = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        resultType: "FAILURE",
+        error: "UNAUTHORIZED",
+        success: null,
+      });
+    }
+
+    // 🔎 요청 검증 (여기서 400로 정리)
     const { restaurantId, place } = req.body ?? {};
-    const result = await addFavorite({ userId, restaurantId, place });
+    const rid = toPosInt(restaurantId, null);
+    if (rid == null && !place) {
+      console.warn("[FAV][UPSERT] invalid body:", req.body);
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        resultType: "FAILURE",
+        error: "RESTAURANT_ID_OR_PLACE_REQUIRED",
+        success: null,
+      });
+    }
 
-    if (typeof res.success === "function")
-      return res.success(result, StatusCodes.OK);
-
+    const result = await addFavorite({ userId, restaurantId: rid, place });
     return res
       .status(StatusCodes.OK)
       .json({ resultType: "SUCCESS", error: null, success: result });
   } catch (e) {
+    console.error("[FAV][UPSERT] error:", e); // 👈 스택 확인
     next(e);
   }
 };
 
-/** 즐겨찾기 삭제 */
+/** 삭제 */
 export const removeFavoriteById = async (req, res, next) => {
   try {
     const userId = req.user?.id;
@@ -59,17 +78,21 @@ export const removeFavoriteById = async (req, res, next) => {
         success: null,
       });
     }
-    const restaurantId = Number(req.params.restaurantId);
+    const restaurantId = toPosInt(req.params.restaurantId, null);
+    if (restaurantId == null) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        resultType: "FAILURE",
+        error: "INVALID_RESTAURANT_ID",
+        success: null,
+      });
+    }
 
     await removeFavorite(userId, restaurantId);
-
-    if (typeof res.success === "function")
-      return res.success(true, StatusCodes.OK);
-
     return res
       .status(StatusCodes.OK)
       .json({ resultType: "SUCCESS", error: null, success: true });
   } catch (e) {
+    console.error("[FAV][DELETE] error:", e);
     next(e);
   }
 };
