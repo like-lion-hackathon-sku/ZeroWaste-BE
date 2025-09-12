@@ -8,6 +8,7 @@ import {
 import {
   authenticateAccessToken,
   verifyUserIsActive,
+  identifyAccessToken,
 } from "../../auth/middleware/auth.middleware.js";
 
 const r = Router();
