@@ -1,4 +1,4 @@
-// 위치: src/restaurants/controller/nearby.controller.js
+// 위치: src / restaurants / controller / nearby.controller.js
 import { StatusCodes } from "http-status-codes";
 import { searchLocal } from "../service/naver.service.js";
 import { ensureRestaurant } from "../service/restaurants.service.js";
@@ -348,30 +348,46 @@ export const getNearbyRestaurantsCtrl = async (req, res, next) => {
     const { q } = req.query;
     if (!q) return res.status(400).json({ error: "QUERY_REQUIRED" });
 
-    // 1) 네이버 검색 (필요시 개수 조절)
-    const places = await searchLocal(q, 10);
+    let places = [];
+    try {
+      places = await searchLocal(q, 10);
+    } catch (err) {
+      // 네이버 실패해도 전체 화면 죽이지 말고, 빈 목록 + 에러 힌트만 제공
+      return res.status(StatusCodes.OK).json({
+        resultType: "SUCCESS",
+        error: null,
+        success: { items: [], hint: "NAVER_SEARCH_FAILED" },
+      });
+    }
 
-    // 2) 식당/카페 등만 통과
     const filtered = places.filter((p) =>
       isRestaurantCategory(p?.category, p?.name),
     );
 
-    // 3) 이름+주소 기준 중복 제거 (네이버가 같은 항목을 중복 반환하는 경우 방지)
+    // 주소 없는 항목은 멱등 확보에서 400나므로 미리 제외
+    const filteredWithAddr = filtered.filter(
+      (p) => p?.name && p?.address && String(p.address).trim() !== "",
+    );
+
     const uniq = [];
     const seen = new Set();
-    for (const p of filtered) {
+    for (const p of filteredWithAddr) {
       const key = `${p.name}__${p.address}`;
       if (seen.has(key)) continue;
       seen.add(key);
       uniq.push(p);
     }
 
-    // 4) DB 멱등 확보 + 점수 조인
     const items = [];
     for (const p of uniq) {
-      const { restaurantId } = await ensureRestaurant({ place: p });
-      const score = await getRestaurantScore(restaurantId);
-      items.push({ restaurantId, ...p, score });
+      try {
+        const { restaurantId } = await ensureRestaurant({ place: p });
+        const score = await getRestaurantScore(restaurantId);
+        items.push({ restaurantId, ...p, score });
+      } catch (err) {
+        // 개별 실패는 스킵(전체 목록은 유지)
+        continue;
+      }
     }
 
     return res.status(StatusCodes.OK).json({

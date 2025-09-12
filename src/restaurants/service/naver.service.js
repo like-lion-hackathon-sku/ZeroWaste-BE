@@ -1,3 +1,4 @@
+// 위치: src / restaurants / service / naver.service.js
 import "dotenv/config";
 import axios from "axios";
 

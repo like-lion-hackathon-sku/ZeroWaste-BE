@@ -1,3 +1,4 @@
+// 위치: src / restaurants / service / restaurants.service.js
 import * as restRepo from "../repository/restaurants.repository.js";
 
 /** 카테고리 문자열 → ENUM 매핑 */

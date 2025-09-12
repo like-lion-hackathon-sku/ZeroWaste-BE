@@ -11,7 +11,10 @@ import {
 } from "../../auth/middleware/auth.middleware.js";
 
 const r = Router();
+// ✅ 즐겨찾기는 로그인 필요
+r.use(authenticateAccessToken, verifyUserIsActive);
 
+/* ───────── 공통 유틸 ───────── */
 /* restaurantId 파라미터 검증 함수
  * restaurantId가 숫자가 아니면 404 응답
  */

@@ -1,3 +1,4 @@
+// 위치: src / restaurants / controller / restaurants.controller.js
 import { StatusCodes } from "http-status-codes";
 import {
   ensureRestaurant,
