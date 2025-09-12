@@ -11,7 +11,7 @@ const router = express.Router();
 router.post(
   "/restaurants/:id/reviews",
   authenticateAccessToken,
-  handleCreateReviews
+  handleCreateReviews,
 );
 router.put("/:reviewId", authenticateAccessToken, handleUpdateReviews);
 router.delete("/:reviewId", authenticateAccessToken, handleDeleteReviews);
