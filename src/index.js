@@ -9,7 +9,9 @@ import { logAuth } from "./_debug/log-auth.middleware.js";
 import { logRoute } from "./_debug/log-route.middleware.js";
 const app = setupExpress();
 const port = process.env.PORT;
-
+if (process.env.DEBUG_ROUTES === "1") {
+  app.use(logRoute); // 라우터보다 위
+}
 setupSwagger(app);
 app.use(logRoute);
 app.use(logAuth);
