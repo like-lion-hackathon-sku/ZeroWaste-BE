@@ -12,10 +12,10 @@ export const listMyFavoritesCtrl = async (req, res, next) => {
     const userId = req.user.id;
 
     // page/size를 숫자로 정규화
-    const pageRaw = req.query.page ?? 1;
-    const sizeRaw = req.query.size ?? 20;
-    const page = Number.isFinite(+pageRaw) && +pageRaw > 0 ? +pageRaw : 1;
-    const size = Number.isFinite(+sizeRaw) && +sizeRaw > 0 ? +sizeRaw : 20;
+    const toPosInt = (v, d) =>
+      Number.isFinite(+v) && +v > 0 ? Math.floor(+v) : d;
+    const page = toPosInt(req.query.page, 1);
+    const size = toPosInt(req.query.size, 20);
 
     const data = await listMyFavorites(userId, { page, size });
 
@@ -51,7 +51,14 @@ export const upsertFavorite = async (req, res, next) => {
 /** 즐겨찾기 삭제 */
 export const removeFavoriteById = async (req, res, next) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({
+        resultType: "FAILURE",
+        error: "UNAUTHORIZED",
+        success: null,
+      });
+    }
     const restaurantId = Number(req.params.restaurantId);
 
     await removeFavorite(userId, restaurantId);
