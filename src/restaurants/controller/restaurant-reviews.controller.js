@@ -1,7 +1,58 @@
-// src/restaurants/controller/restaurant-reviews.controller.js
+// 위치: src / restaurants / controller / restaurant-reviews.controller.js
 import { StatusCodes } from "http-status-codes";
 import { prisma } from "../../db.config.js";
 
+/**
+ * GET /restaurants/:restaurantId/reviews
+ *
+ * 특정 식당의 리뷰 목록 조회 컨트롤러
+ *
+ * - restaurantId 유효성 검사 (양의 정수)
+ * - 페이지네이션(page, size) 적용
+ * - 최신순(createdAt desc) 정렬
+ * - 사용자 닉네임 포함 반환
+ *
+ * @async
+ * @function handleGetRestaurantReviews
+ * @param {import("express").Request} req
+ * @param {import("express").Response} res
+ * @param {import("express").NextFunction} next
+ *
+ * @param {string} req.params.restaurantId - 식당 ID (필수, 양의 정수)
+ * @param {string|number} [req.query.page=1] - 페이지 번호
+ * @param {string|number} [req.query.size=10] - 페이지 크기 (최대 50)
+ *
+ * @returns {Promise<void>}
+ *
+ * @example 성공 응답
+ * {
+ *   "resultType": "SUCCESS",
+ *   "error": null,
+ *   "success": {
+ *     "items": [
+ *       {
+ *         "id": 1,
+ *         "restaurantId": 3,
+ *         "userId": 5,
+ *         "nickname": "홍길동",
+ *         "contents": "맛있어요",
+ *         "score": 5,
+ *         "createdAt": "2025-09-13T12:34:56.000Z"
+ *       }
+ *     ],
+ *     "page": 1,
+ *     "size": 10,
+ *     "totalCount": 42
+ *   }
+ * }
+ *
+ * @example 실패 응답 (잘못된 restaurantId)
+ * {
+ *   "resultType": "FAILURE",
+ *   "error": "INVALID_RESTAURANT_ID",
+ *   "success": null
+ * }
+ */
 export const handleGetRestaurantReviews = async (req, res, next) => {
   try {
     const restaurantId = Number(req.params.restaurantId);
