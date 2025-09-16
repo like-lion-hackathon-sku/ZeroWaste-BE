@@ -1,4 +1,6 @@
-// 위치: src / restaurants / router /restaurants.router.js
+// 위치: src / restaurants / router / restaurants.router.js
+// 제작자: 김민호
+// 최종 수정일: 2025 09 16 21:48
 import { Router } from "express";
 import {
   ensureRestaurantCtrl,
@@ -10,13 +12,8 @@ import { handleGetRestaurantReviews } from "../controller/restaurant-reviews.con
 
 const r = Router({ mergeParams: true });
 
-/**
- * restaurantId 파라미터 검증 미들웨어
- *
- * @param {import("express").Request} req
- * @param {import("express").Response} res
- * @param {import("express").NextFunction} next
- * @returns {*}
+/* restaurantId 파라미터 검증 미들웨어
+ * - restaurantId가 숫자가 아닐경우 404 반환
  */
 function onlyDigits404(req, res, next) {
   const { restaurantId } = req.params;
@@ -28,68 +25,37 @@ function onlyDigits404(req, res, next) {
   next();
 }
 
-/**
- * GET /restaurants/nearby
- *
- * 네이버 API를 이용한 주변 식당 검색
- *
- * @route GET /restaurants/nearby
- * @query {string} q - 검색어
- * @returns {200} JSON { resultType:"SUCCESS", success:[...restaurants], error:null }
+/* 식당 검색 라우터
+ * 매서드: GET
+ * 엔드포인트: api/restaurants/nearby
  */
 r.get("/nearby", getNearbyRestaurantsCtrl);
 
-/**
- * GET /restaurants/:restaurantId/detail
- *
- * DB 기준 식당 상세 조회
- *
- * @route GET /restaurants/{restaurantId}/detail
- * @param {number} restaurantId.path.required - 식당 ID
- * @returns {200} JSON { resultType:"SUCCESS", success:{...restaurant}, error:null }
- * @returns {404} JSON { resultType:"FAILURE", error:"NOT_FOUND" }
+/* 식당 상세 조회 라우터
+ * 매서드: GET
+ * 엔드포인트" api/restaurants/:restaurantId/detail
  */
 r.get("/:restaurantId/detail", onlyDigits404, getRestaurantDetailCtrl);
 
-/**
- * GET /restaurants/:restaurantId
- *
- * DB 기준 식당 상세 조회 (호환 라우트)
- *
- * @route GET /restaurants/{restaurantId}
- * @param {number} restaurantId.path.required - 식당 ID
+/* 식당 상세 조회 라우터2
+ * 매서드: GET
+ * 엔드포인트: api/restaurants/:restaurantId
  */
 r.get("/:restaurantId", onlyDigits404, getRestaurantDetailCtrl);
 
-/**
- * PUT /restaurants
- *
- * 멱등 확보: 식당이 없으면 생성, 있으면 반환
- *
- * @route PUT /restaurants
- * @body {object} place - 외부 Place payload (예: 네이버 API 결과)
- * @returns {200} JSON { resultType:"SUCCESS", success:{restaurantId,...}, error:null }
+/* 주변 식당 멱등 확보 라우터
+ * 매서드: PUT
+ * 엔드포인트: api/restaurants
  */
 r.put("/", ensureRestaurantCtrl);
 
-/**
- * GET /restaurants/:restaurantId/reviews
- *
- * 특정 식당 리뷰 목록 조회
- * - 로그인은 선택 사항 (identifyAccessToken 사용 → 쿠키/헤더 있으면 payload 세팅)
- *
- * @route GET /restaurants/{restaurantId}/reviews
- * @param {number} restaurantId.path.required - 식당 ID
- * @query {number} [page=1] - 페이지 번호
- * @query {number} [size=20] - 페이지 크기
- * @query {"latest"|"rating"} [sort="latest"] - 정렬 기준
- * @query {number} [rating] - 별점 필터
- * @returns {200} JSON { resultType:"SUCCESS", success:{ items, pageInfo }, error:null }
- * @returns {404} JSON { resultType:"FAILURE", error:"NOT_FOUND" }
+/* 특정 식당 리뷰 조회 라우터
+ * 매서드: GET
+ * 엔드포인트: api/restaurants/:restaurantId/reviews
  */
 r.get(
   "/:restaurantId/reviews",
-  identifyAccessToken, // 쿠키/헤더 있으면 payload 세팅
+  identifyAccessToken,
   onlyDigits404,
   handleGetRestaurantReviews,
 );

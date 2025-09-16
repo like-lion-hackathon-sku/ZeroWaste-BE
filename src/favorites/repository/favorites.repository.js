@@ -1,45 +1,17 @@
-// 위치: src/favorites/repository/favorites.repository.js
+// 위치: src / favorites / repository / favorites.repository.js
 import { PrismaClient } from "../../generated/prisma/index.js";
 
 const g = globalThis;
-/** @type {PrismaClient} - 프로세스 단위 Prisma 싱글턴 */
+/* PrismaClient 싱글턴
+ * - Prisma는 DB 연결을 여러 번 만들면 성능 문제가 생길 수 있음
+ * - globalThis에 보관해서 재사용
+ */
 const prisma = g.__fwzmPrisma ?? new PrismaClient();
 if (!g.__fwzmPrisma) g.__fwzmPrisma = prisma;
 
-/**
- * @typedef {Object} PageInfo
- * @property {number} page  - 현재 페이지(1-base)
- * @property {number} size  - 페이지 크기
- * @property {number} total - 전체 개수
- */
-
-/**
- * @typedef {Object} FavoriteItem
- * @property {number} id
- * @property {number|null} restaurantId
- * @property {string|null} name
- * @property {string|null} category
- * @property {string|null} address
- * @property {string|null} telephone
- * @property {number|null} mapx
- * @property {number|null} mapy
- */
-
-/**
- * @typedef {Object} FavoriteList
- * @property {FavoriteItem[]} items
- * @property {PageInfo} pageInfo
- */
-
-/**
- * 멱등 추가: (userId, restaurantsId) 중복 방지
- * - 이미 존재하면 아무것도 하지 않고 false 반환
- * - 없으면 생성 후 true 반환
- *
- * @async
- * @param {number} userId
- * @param {number} restaurantsId
- * @returns {Promise<boolean>} created 여부
+/* 즐겨찾기 추가 (멱등)
+ * - (userId, restaurantsId) 조합이 이미 있으면 아무것도 안 함 → false 반환
+ * - 없으면 새로 생성 → true 반환
  */
 export async function ensureFavorite(userId, restaurantsId) {
   const found = await prisma.favorites.findFirst({
@@ -52,25 +24,27 @@ export async function ensureFavorite(userId, restaurantsId) {
   return true;
 }
 
-/**
- * 멱등 삭제: 존재해도/안 해도 안전하게 삭제 시도
- *
- * @async
- * @param {number} userId
- * @param {number} restaurantsId
- * @returns {Promise<void>}
+/* 즐겨찾기 삭제 (멱등)
+ * - 해당 userId + restaurantsId 레코드 모두 삭제
+ * - 존재하지 않아도 에러 없이 통과
  */
 export async function deleteFavorite(userId, restaurantsId) {
   await prisma.favorites.deleteMany({ where: { userId, restaurantsId } });
 }
 
-/**
- * 내 즐겨찾기 목록 (page/size 기반)
+/* 내 즐겨찾기 목록 조회
+ * - page/size 기반으로 페이징 처리
+ * - restaurants 테이블과 join해서 식당 기본 정보도 포함
+ * - size는 최소 1, 최대 50 제한
  *
- * @async
- * @param {number} userId
- * @param {{page?:number, size?:number}} [opts]
- * @returns {Promise<FavoriteList>}
+ * 반환 구조:
+ * {
+ *   items: [
+ *     { id, restaurantId, name, category, address, telephone, mapx, mapy },
+ *     ...
+ *   ],
+ *   pageInfo: { page, size, total }
+ * }
  */
 export async function findByUser(userId, { page = 1, size = 20 } = {}) {
   const safePage = Number.isFinite(+page) && +page > 0 ? +page : 1;
@@ -104,7 +78,6 @@ export async function findByUser(userId, { page = 1, size = 20 } = {}) {
     }),
   ]);
 
-  /** @type {FavoriteItem[]} */
   const items = rows.map((r) => ({
     id: r.id,
     restaurantId: r.restaurants?.id ?? null,
@@ -116,22 +89,13 @@ export async function findByUser(userId, { page = 1, size = 20 } = {}) {
     mapy: r.restaurants?.mapy ?? null,
   }));
 
-  /** @type {PageInfo} */
-  const pageInfo = { page: safePage, size: safeSize, total };
-  return { items, pageInfo };
+  return { items, pageInfo: { page: safePage, size: safeSize, total } };
 }
 
-/* ==================== 🔽 추가된 유틸/함수들 🔽 ==================== */
-
-/**
- * 사용자 즐겨찾기 중 이름/주소가 일치하는 항목을 찾기
- * - 대소문자 무시, 양쪽 trim
- *
- * @async
- * @param {number} userId
- * @param {string} name
- * @param {string} address
- * @returns {Promise<{favoriteId:number, restaurantId:number|null} | null>}
+/* 사용자 즐겨찾기 중 이름/주소로 검색
+ * - 대소문자 구분 없이, trim 처리 후 비교
+ * - 있으면 favoriteId와 restaurantId 반환
+ * - 없으면 null
  */
 export async function findUserFavoriteByNameAddress(userId, name, address) {
   const nm = String(name ?? "").trim();
@@ -155,16 +119,10 @@ export async function findUserFavoriteByNameAddress(userId, name, address) {
   };
 }
 
-/**
- * 사용자의 즐겨찾기를 다른 restaurant로 재할당
- * - (userId, toId) 이미 존재 시 중복 방지를 위해 먼저 삭제
- * - 이후 (userId, fromId) → toId 로 updateMany
- *
- * @async
- * @param {number} userId
- * @param {number} fromId
- * @param {number} toId
- * @returns {Promise<number>} 재할당 건수
+/* 사용자의 즐겨찾기를 다른 식당으로 재할당
+ * - 만약 (userId, toId)가 이미 있으면 먼저 삭제
+ * - 이후 (userId, fromId)를 모두 toId로 변경
+ * - 실제 변경된 건수 반환
  */
 export async function reassignFavoritesForUser(userId, fromId, toId) {
   if (!userId || !fromId || !toId || fromId === toId) return 0;
@@ -181,21 +139,23 @@ export async function reassignFavoritesForUser(userId, fromId, toId) {
   return res.count || 0;
 }
 
-/**
- * 특정 식당의 리뷰 목록
+/* 특정 식당의 리뷰 목록 조회
+ * - page/size, 정렬(sort), 별점(rating) 조건 지원
+ * - sort="rating"이면 별점 높은 순, 기본은 최신순
+ * - 결과에 리뷰 작성자(user) 정보 포함
  *
- * @async
- * @param {number} restaurantId
- * @param {{page:number, size:number, sort?:"rating"|"recent", rating?:number}} opts
- * @param {object} [ctx={}] - 트랜잭션/요청 컨텍스트 등 (미사용 시 빈 객체)
- * @returns {Promise<{ items: Array<{
- *   id:number,
- *   restaurantId:number,
- *   user:{ id:number|null, nickname:string|null, profileImage:string|null },
- *   rating:number,
- *   content:string,
- *   createdAt:string
- * }>, pageInfo:PageInfo }>}
+ * 반환 구조:
+ * {
+ *   items: [
+ *     {
+ *       id, restaurantId,
+ *       user: { id, nickname, profileImage },
+ *       rating, content, createdAt
+ *     },
+ *     ...
+ *   ],
+ *   pageInfo: { page, size, total }
+ * }
  */
 export async function findReviewsByRestaurant(
   restaurantId,

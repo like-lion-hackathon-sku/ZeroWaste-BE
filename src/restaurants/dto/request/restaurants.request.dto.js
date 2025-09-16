@@ -1,35 +1,25 @@
 // 위치: src / restaurants / dto / request / restaurans.request.dto.js
-/**
- * @typedef RestaurantRequestById
- * @property {number} restaurantId - 이미 DB에 존재하는 식당 ID
- */
+// 제작자: 김민호
+// 최종 수정일: 2025 09 16 21:52
 
-/**
- * @typedef RestaurantRequestByPlace
- * @property {object} place - 외부 place payload
- * @property {string} place.name - 식당명 (필수)
- * @property {string} place.address - 주소 (필수)
- * @property {string} [place.category] - 카테고리 문자열
- * @property {string} [place.telephone] - 전화번호
- * @property {number} [place.mapx] - 지도 좌표 X
- * @property {number} [place.mapy] - 지도 좌표 Y
- */
-
-/**
- * Restaurant 멱등 확보 요청 DTO
+/* Restaurant 멱등 확보 요청 DTO
  *
- * - `restaurantId`를 직접 지정하거나
- * - `place` 객체를 전달하여 새로 생성/보장할 수 있음
+ * - 클라이언트가 식당을 보장(ensure)할 때 사용하는 요청 형식
+ * - 두 가지 방법으로 요청 가능:
+ *   1) restaurantId를 직접 지정 → 이미 존재하는 식당을 보장
+ *   2) place 객체를 전달 → DB에 없으면 새로 생성
+ *
+ * 사용 예시:
+ * { "restaurantId": 5 }
+ * 또는
+ * { "place": { "name": "김밥천국", "address": "서울시 강남구 ..." } }
  */
 export class EnsureRestaurantRequestDto {
-  /**
-   * @param {Partial<RestaurantRequestById & RestaurantRequestByPlace>} body
-   */
   constructor(body) {
-    /** @type {number|null} DB에 존재하는 식당 ID */
+    // DB에 이미 존재하는 식당 ID (없으면 null)
     this.restaurantId = body?.restaurantId ?? null;
 
-    /** @type {RestaurantRequestByPlace["place"]|null} 외부 place payload */
+    // 외부 place payload (이름과 주소는 필수, 카테고리/전화/좌표는 선택)
     this.place = body?.place ?? null;
   }
 }

@@ -1,48 +1,37 @@
-// 위치: src/restaurants/repository/restaurants.repository.js
+// 위치: src / restaurants / repository / restaurants.repository.js
+// 제작자: 김민호
+// 최종 수정일: 2025 09 16 21:48
 import { PrismaClient } from "../../generated/prisma/index.js";
 
 const g = globalThis;
-/** @type {PrismaClient} - 프로세스 전역 Prisma 싱글턴 */
+/* PrismaClient 싱글턴
+ * - Prisma는 DB 연결을 여러 번 만들면 성능 문제가 생길 수 있음
+ * - 그래서 globalThis에 보관하고, 이미 있으면 재사용
+ */
 const prisma = g.__fwzmPrisma ?? new PrismaClient();
 if (!g.__fwzmPrisma) g.__fwzmPrisma = prisma;
 
-/**
- * 식당 단건 조회 (id 기준)
- *
- * @async
- * @param {number|string} id - 식당 ID
- * @returns {Promise<object|null>} 식당 레코드 (없으면 null)
+/* 식당 단건 조회 (id 기준)
+ * - restaurants 테이블에서 id로 단일 레코드 조회
+ * - 해당 id가 없으면 null 반환
  */
 export async function findById(id) {
   return prisma.restaurants.findUnique({ where: { id: Number(id) } });
 }
 
-/**
- * (멱등 매칭) name + address 로 식당 조회
- *
- * @async
- * @param {string} name - 식당 이름
- * @param {string} address - 식당 주소
- * @returns {Promise<object|null>} 식당 레코드 (없으면 null)
+/* 식당 조회 (멱등 매칭: name + address)
+ * - 같은 이름과 주소가 있는 식당을 찾음
+ * - name이나 address가 없으면 null 반환
  */
 export async function findByNameAddress(name, address) {
   if (!name || !address) return null;
   return prisma.restaurants.findFirst({ where: { name, address } });
 }
 
-/**
- * 신규 식당 생성
- *
- * @async
- * @param {object} data
- * @param {string} data.name
- * @param {string} data.category
- * @param {string} data.address
- * @param {string=} data.telephone
- * @param {number|null=} data.mapx
- * @param {number|null=} data.mapy
- * @param {boolean=} data.isSponsored
- * @returns {Promise<object>} 생성된 식당 레코드
+/* 신규 식당 생성
+ * - 전달된 데이터로 restaurants 테이블에 새 레코드 추가
+ * - 문자열은 길이 제한을 걸고, 좌표 값이 없으면 null 처리
+ * - isSponsored 값은 boolean으로 변환
  */
 export async function create(data) {
   const payload = {
@@ -57,14 +46,12 @@ export async function create(data) {
   return prisma.restaurants.create({ data: payload });
 }
 
-/**
- * 식당 상세 조회: 기본정보 + 리뷰/사진 통계
+/* 식당 상세 조회
+ * - 기본 정보 (name, category, address 등)
+ * - 리뷰 개수, 사진 개수, 평균 잔반률, 친환경 점수(ecoScore)까지 포함
+ * - 잔반률이 없으면 ecoScore는 null 반환
  *
- * @async
- * @param {number|string} restaurantId - 식당 ID
- * @returns {Promise<object|null>} 상세 객체 (없으면 null)
- *
- * @example
+ * 반환 예시:
  * {
  *   id: 1,
  *   name: "김밥천국",
@@ -81,6 +68,8 @@ export async function create(data) {
  */
 export async function findDetailById(restaurantId) {
   const id = Number(restaurantId);
+
+  // 기본 식당 정보
   const base = await prisma.restaurants.findUnique({
     where: { id },
     select: {
@@ -98,6 +87,7 @@ export async function findDetailById(restaurantId) {
   });
   if (!base) return null;
 
+  // 리뷰 개수, 사진 개수, 평균 잔반률 동시에 조회
   const [reviewAgg, photoAgg, avgAgg] = await Promise.all([
     prisma.reviews.aggregate({
       _count: { _all: true },
@@ -116,6 +106,8 @@ export async function findDetailById(restaurantId) {
   const reviewCount = reviewAgg?._count?._all ?? 0;
   const photoCount = photoAgg?._count?._all ?? 0;
   const avgLeftover = avgAgg?._avg?.leftoverRatio ?? null;
+
+  // ecoScore = (1 - 평균 잔반률) * 5 (소수점 한 자리)
   const ecoScore =
     avgLeftover == null ? null : Math.round((1 - avgLeftover) * 5 * 10) / 10;
 
@@ -130,13 +122,10 @@ export async function findDetailById(restaurantId) {
   };
 }
 
-/**
- * 특정 사용자가 해당 식당을 즐겨찾기 했는지 여부
- *
- * @async
- * @param {number|string|null|undefined} userId - 사용자 ID
- * @param {number|string} restaurantsId - 식당 ID
- * @returns {Promise<boolean>} true=즐겨찾기 있음, false=없음
+/* 즐겨찾기 여부 확인
+ * - 특정 사용자(userId)가 특정 식당(restaurantsId)을 즐겨찾기 했는지 검사
+ * - favorites 테이블에 존재하면 true, 없으면 false 반환
+ * - userId가 없으면 false 바로 반환
  */
 export async function isFavorite(userId, restaurantsId) {
   if (!userId) return false;

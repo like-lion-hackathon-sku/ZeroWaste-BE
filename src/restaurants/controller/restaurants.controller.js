@@ -1,36 +1,25 @@
 // 위치: src / restaurants / controller / restaurans.controller.js
+// 제작자: 김민호
+// 최종 수정일: 2025 09 16 21:51
 import { StatusCodes } from "http-status-codes";
 import {
   ensureRestaurant,
   getRestaurantDetail,
 } from "../service/restaurants.service.js";
 
-/**
- * PUT /api/restaurants
- *
+/* PUT /api/restaurants
  * 식당 멱등 확보 컨트롤러
- * - restaurantId 또는 place payload로 DB에 보장
- * - 존재하지 않으면 생성, 있으면 기존 ID 반환
  *
- * @async
- * @function ensureRestaurantCtrl
- * @param {import("express").Request} req
- * @param {import("express").Response} res
- * @param {import("express").NextFunction} next
+ * - 요청 body에 restaurantId 또는 place를 받아 처리
+ * - restaurantId가 있으면 DB에서 존재 여부 확인 후 반환
+ * - 없거나 유효하지 않으면 place(name, address 필수) 기준으로 새로 생성
+ * - 이미 있으면 기존 ID 반환, 없으면 새로 생성 후 ID 반환
  *
- * @body {number} [restaurantId] - 기존 식당 ID (선택)
- * @body {object} [place] - 외부 place payload (name, address 필수)
- *
- * @returns {Promise<void>}
- *
- * @example 성공 응답
+ * 성공 응답 예시:
  * {
- *   "resultType": "SUCCESS",
- *   "error": null,
- *   "success": {
- *     "restaurantId": 12,
- *     "created": true
- *   }
+ *   resultType: "SUCCESS",
+ *   error: null,
+ *   success: { restaurantId: 12, created: true }
  * }
  */
 export const ensureRestaurantCtrl = async (req, res, next) => {
@@ -38,9 +27,11 @@ export const ensureRestaurantCtrl = async (req, res, next) => {
     const { restaurantId, place } = req.body ?? {};
     const result = await ensureRestaurant({ restaurantId, place });
 
+    // 공통 응답 포맷 헬퍼(res.success)가 있으면 사용
     if (typeof res.success === "function")
       return res.success(result, StatusCodes.OK);
 
+    // 없으면 직접 JSON 응답
     return res
       .status(StatusCodes.OK)
       .json({ resultType: "SUCCESS", error: null, success: result });
@@ -49,51 +40,38 @@ export const ensureRestaurantCtrl = async (req, res, next) => {
   }
 };
 
-/**
- * GET /api/restaurants/:restaurantId/detail
+/* GET /api/restaurants/:restaurantId/detail
+ * 특정 식당 상세 조회 컨트롤러
  *
- * DB에 저장된 특정 식당 상세 조회 컨트롤러
+ * - restaurantId를 파라미터로 받아 DB에서 조회
  * - 존재하지 않으면 404 반환
- * - 로그인 사용자는 즐겨찾기 여부 포함
+ * - 로그인한 사용자면 즐겨찾기 여부(isFavorite)도 함께 반환
  *
- * @async
- * @function getRestaurantDetailCtrl
- * @param {import("express").Request} req
- * @param {import("express").Response} res
- * @param {import("express").NextFunction} next
- *
- * @param {string} req.params.restaurantId - 식당 ID
- *
- * @returns {Promise<void>}
- *
- * @example 성공 응답
+ * 성공 응답 예시:
  * {
- *   "resultType": "SUCCESS",
- *   "error": null,
- *   "success": {
- *     "id": 3,
- *     "name": "한식당",
- *     "category": "KOREAN",
- *     "address": "서울시 강남구...",
- *     "telephone": "02-123-4567",
- *     "mapx": 127.12345,
- *     "mapy": 37.54321,
- *     "isSponsored": false,
- *     "stats": {
- *       "reviews": 10,
- *       "photos": 8,
- *       "avgLeftoverRatio": 0.15,
- *       "ecoScore": 4.2
+ *   resultType: "SUCCESS",
+ *   error: null,
+ *   success: {
+ *     id: 3,
+ *     name: "한식당",
+ *     category: "KOREAN",
+ *     address: "서울시 강남구...",
+ *     telephone: "02-123-4567",
+ *     mapx: 127.12345,
+ *     mapy: 37.54321,
+ *     isSponsored: false,
+ *     stats: {
+ *       reviews: 10,
+ *       photos: 8,
+ *       avgLeftoverRatio: 0.15,
+ *       ecoScore: 4.2
  *     },
- *     "isFavorite": true
+ *     isFavorite: true
  *   }
  * }
  *
- * @example 실패 응답 (잘못된 restaurantId)
- * {
- *   "ok": false,
- *   "error": "NOT_FOUND"
- * }
+ * 실패 응답 예시:
+ * { ok: false, error: "NOT_FOUND" }
  */
 export const getRestaurantDetailCtrl = async (req, res, next) => {
   try {
@@ -117,32 +95,24 @@ export const getRestaurantDetailCtrl = async (req, res, next) => {
 
 /* ===================== DTO ===================== */
 
-/**
- * EnsureRestaurant 요청 DTO
+/* EnsureRestaurant 요청 DTO
+ * - 클라이언트에서 보낸 body를 정리하는 용도
+ * - restaurantId 또는 place를 가질 수 있음
  */
 export class EnsureRestaurantRequestDto {
-  /**
-   * @param {{restaurantId?:number, place?:object}} body
-   */
   constructor(body) {
-    /** @type {number|null} */
     this.restaurantId = body?.restaurantId ?? null;
-    /** @type {object|null} */
     this.place = body?.place ?? null;
   }
 }
 
-/**
- * EnsureRestaurant 응답 DTO
+/* EnsureRestaurant 응답 DTO
+ * - 컨트롤러에서 클라이언트로 반환할 데이터 형태
+ * - restaurantId와 created 여부를 포함
  */
 export class EnsureRestaurantResponseDto {
-  /**
-   * @param {{ restaurantId:number, created:boolean }} result
-   */
   constructor(result) {
-    /** @type {number} */
     this.restaurantId = result.restaurantId;
-    /** @type {boolean} */
     this.created = result.created;
   }
 }
