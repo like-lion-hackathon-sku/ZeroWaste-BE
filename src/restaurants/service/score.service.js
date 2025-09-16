@@ -1,29 +1,31 @@
 // 위치: src / restaurants / service / score.service.js
+// 제작자: 김민호
+// 최종 수정일: 2025 09 16 21:48
 import { PrismaClient } from "../../generated/prisma/index.js";
 
 const g = globalThis;
-/** @type {PrismaClient} - 프로세스 전역 Prisma 싱글턴 */
+/* PrismaClient 싱글턴 생성
+ * - Prisma는 DB 연결을 많이 생성하면 성능/메모리 문제가 생길 수 있음
+ * - 따라서 globalThis에 보관해두고, 이미 있으면 재사용
+ */
 const prisma = g.__fwzmPrisma ?? new PrismaClient();
 if (!g.__fwzmPrisma) g.__fwzmPrisma = prisma;
 
-/**
- * 식당 점수 계산 서비스
+/* 특정 식당의 친환경 점수를 계산하는 서비스
  *
- * - 기준: reviewPhotos 테이블의 leftoverRatio(잔반 비율) 평균값
- * - 계산식: `ecoScore = (1 - avgLeftover) * 5`
- *   - leftoverRatio = 0 → ecoScore = 5.0 (최고점)
- *   - leftoverRatio = 1 → ecoScore = 0.0 (최저점)
- * - 소수점 첫째 자리까지 반올림
+ * 점수 산정 기준:
+ * - reviewPhotos 테이블의 leftoverRatio(잔반 비율) 평균값 사용
+ * - 점수 계산식: (1 - avgLeftover) * 5
+ *   예) 잔반 0.0 → 점수 5.0 (최고점)
+ *       잔반 1.0 → 점수 0.0 (최저점)
+ * - 계산 후 소수점 첫째 자리까지 반올림
  *
- * @async
- * @param {number} restaurantId - 식당 ID
- * @returns {Promise<number|null>} 0~5 범위 ecoScore (소수점 1자리), 데이터 없으면 null
- *
- * @example
- * const score = await getRestaurantScore(3);
- * // e.g. 4.2
+ * 반환값:
+ * - 0.0 ~ 5.0 범위 점수 (소수점 한 자리)
+ * - 리뷰 데이터가 없으면 null 반환
  */
 export async function getRestaurantScore(restaurantId) {
+  // 해당 식당의 잔반 비율 평균값 조회
   const agg = await prisma.reviewPhotos.aggregate({
     _avg: { leftoverRatio: true },
     where: { reviews: { restaurantsId: restaurantId } },
@@ -32,5 +34,6 @@ export async function getRestaurantScore(restaurantId) {
   const avgLeftover = agg._avg?.leftoverRatio ?? null;
   if (avgLeftover == null) return null;
 
-  return Math.round((1 - avgLeftover) * 5 * 10) / 10; // 0~5 점, 소수 1자리
+  // 점수 계산 후 소수점 첫째 자리까지 반올림
+  return Math.round((1 - avgLeftover) * 5 * 10) / 10;
 }

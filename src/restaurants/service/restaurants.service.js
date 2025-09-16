@@ -1,11 +1,11 @@
-// 위치: src / restaurants / service /restaurants.service.js
+// 위치: src / restaurants / service / restaurants.service.js
+// 제작자: 김민호
+// 최종 수정일: 2025 09 16 21:48
 import * as restRepo from "../repository/restaurants.repository.js";
 
-/**
- * 카테고리 문자열 → ENUM 매핑
- *
- * @param {string} input
- * @returns {"KOREAN"|"JAPANESE"|"CHINESE"|"WESTERN"|"FASTFOOD"|"CAFE"|"ETC"}
+/* 카테고리 문자열을 DB의 카테고리로 변환하는 함수
+ * - 입력 문자열에 특정 키워드가 포함되어 있으면 대응되는 DB의 카테고리로 반환
+ * - 매칭되지 않으면 ETC 반환
  */
 function toFoodCategoryEnum(input) {
   const s = String(input || "").toLowerCase();
@@ -37,26 +37,11 @@ function toFoodCategoryEnum(input) {
   return "ETC";
 }
 
-/**
- * 외부 place payload 정규화
- *
- * @typedef {Object} NormalizedPlace
- * @property {string} name
- * @property {string} address
- * @property {"KOREAN"|"JAPANESE"|"CHINESE"|"WESTERN"|"FASTFOOD"|"CAFE"|"ETC"} category
- * @property {string} telephone
- * @property {number|null} mapx
- * @property {number|null} mapy
- *
- * @param {Object} [place={}]
- * @param {string} [place.name]
- * @param {string} [place.address]
- * @param {string} [place.category]
- * @param {string} [place.telephone]
- * @param {number|string} [place.mapx]
- * @param {number|string} [place.mapy]
- * @returns {NormalizedPlace}
- * @throws {Error & {status:number}} INVALID_PLACE_PAYLOAD(400) - name 또는 address 누락 시
+/* 외부 place payload를 내부 표준 형태로 변환하는 함수
+ * - name, address 값이 반드시 있어야 함 (없으면 400 에러 발생)
+ * - category는 ENUM으로 변환
+ * - 전화번호는 최대 15자로 제한
+ * - 좌표 값은 숫자로 변환, 변환 불가 시 null 처리
  */
 function normalizePlacePayload(place = {}) {
   const { name, address, category, telephone, mapx, mapy } = place;
@@ -85,14 +70,9 @@ function normalizePlacePayload(place = {}) {
   };
 }
 
-/**
- * 외부 장소 동기화(멱등)
- * - 동일 (name, address)가 있으면 해당 레코드의 id 반환
- * - 없으면 생성 후 id 반환
- *
- * @async
- * @param {Object} placePayload - 외부 place 원본 payload
- * @returns {Promise<{ restaurantId:number, created:boolean }>}
+/* 외부 장소 정보를 DB와 동기화하는 함수 (멱등)
+ * - 같은 (name, address) 식당이 있으면 해당 id 반환
+ * - 없으면 새로 생성하고 id 반환
  */
 export async function syncExternalPlace(placePayload) {
   const p = normalizePlacePayload(placePayload);
@@ -102,16 +82,12 @@ export async function syncExternalPlace(placePayload) {
   return { restaurantId: created.id, created: true };
 }
 
-/**
- * 식당 보장: id 또는 외부 place 로 생성/찾기 (멱등)
- *
- * @async
- * @param {Object} params
- * @param {number=} params.restaurantId - 내부 식당 ID (선택)
- * @param {Object=} params.place - 외부 place payload (선택)
- * @returns {Promise<{ restaurantId:number, created:boolean }>}
- * @throws {Error & {status:number}} RESTAURANT_ID_OR_PLACE_REQUIRED(400)
- * @throws {Error & {status:number}} RESTAURANT_NOT_FOUND(404) - restaurantId가 유효하지 않고 place도 없을 때
+/* 식당 보장 함수 (ensure)
+ * - restaurantId 또는 place 중 하나를 받아서 식당을 확보
+ * - restaurantId가 존재하면 그대로 반환
+ * - restaurantId가 없거나 유효하지 않으면 place 기준으로 새로 등록
+ * - 둘 다 없으면 400 에러 반환
+ * - restaurantId가 잘못되었는데 place도 없으면 404 에러 반환
  */
 export async function ensureRestaurant({ restaurantId, place }) {
   if (restaurantId == null && !place) {
@@ -131,14 +107,10 @@ export async function ensureRestaurant({ restaurantId, place }) {
   return await syncExternalPlace(place);
 }
 
-/**
- * 식당 상세 + 즐겨찾기 여부 반환
- *
- * @async
- * @param {number} restaurantId - 내부 식당 ID
- * @param {number|null|undefined} userId - 사용자 ID (null/undefined면 isFavorite은 false 또는 구현에 따름)
- * @returns {Promise<Object & { isFavorite:boolean }>}
- * @throws {Error & {status:number}} RESTAURANT_NOT_FOUND(404)
+/* 식당 상세 정보를 조회하는 함수
+ * - restaurantId로 DB에서 식당 상세를 조회
+ * - userId가 주어지면 해당 사용자의 즐겨찾기 여부도 함께 반환
+ * - 식당이 없으면 404 에러 발생
  */
 export async function getRestaurantDetail(restaurantId, userId) {
   const detail = await restRepo.findDetailById(restaurantId);

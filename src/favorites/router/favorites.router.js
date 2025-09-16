@@ -12,20 +12,16 @@ import {
 
 const r = Router();
 
-/**
- * 즐겨찾기 라우터
- *
- * 모든 라우트는 인증된 사용자만 접근 가능합니다.
- * AccessToken 인증과 사용자 활성화 여부를 검증합니다.
+/* 즐겨찾기 라우터 공통 보안 미들웨어
+ * - 이 라우터 이하의 모든 API는 반드시 로그인한 사용자만 접근 가능
+ * - 먼저 AccessToken을 검증해서 유효한 사용자임을 확인
+ * - 이후 verifyUserIsActive로 비활성/차단된 계정을 차단
+ * 요약: "인증된 정상 사용자"만 즐겨찾기 API를 호출할 수 있도록 보장
  */
 r.use(authenticateAccessToken, verifyUserIsActive);
 
-/**
- * @function onlyDigits404
- * @description restaurantId 파라미터가 숫자가 아닐 경우 404 응답을 반환합니다.
- * @param {import("express").Request} req Express Request 객체
- * @param {import("express").Response} res Express Response 객체
- * @param {import("express").NextFunction} next Express Next 함수
+/* restaurantId 파라미터 검증 미들웨어
+ * - restaurantId가 숫자가 아닐경우 404 반환
  */
 function onlyDigits404(req, res, next) {
   const { restaurantId } = req.params;
@@ -35,43 +31,27 @@ function onlyDigits404(req, res, next) {
   next();
 }
 
-/**
- * GET /api/favorites
- * @summary 내 즐겨찾기 목록 조회
- * @tags Favorites
- * @security bearerAuth
- * @response 200 - 성공 시 즐겨찾기 목록 반환
+/* 내 즐겨찾기 목록 조회 라우터
+ * 매서드: GET
+ * 엔드포인트: /api/favorites
  */
 r.get("/", listMyFavoritesCtrl);
 
-/**
- * POST /api/favorites
- * @summary 즐겨찾기 추가 (idempotent: 이미 있으면 갱신)
- * @tags Favorites
- * @security bearerAuth
- * @body {object} FavoriteCreateRequestDto
- * @response 200 - 성공 시 추가된 즐겨찾기 반환
+/* 즐겨찾기 추가 라우터
+ * 매서드: POST
+ * 엔드포인트: /api/favorites
  */
 r.post("/", upsertFavorite);
 
-/**
- * PUT /api/favorites
- * @summary 즐겨찾기 추가/갱신 (POST와 동일 기능 유지)
- * @tags Favorites
- * @security bearerAuth
- * @body {object} FavoriteCreateRequestDto
- * @response 200 - 성공 시 갱신된 즐겨찾기 반환
+/* 즐겨찾기 추가 라우터
+ * 매서드: PUT
+ * 엔드포인트: /api/favorites
  */
 r.put("/", upsertFavorite);
 
-/**
- * DELETE /api/favorites/:restaurantId
- * @summary 특정 식당의 즐겨찾기 제거
- * @tags Favorites
- * @security bearerAuth
- * @param {number} restaurantId.path.required - 식당 ID
- * @response 200 - 성공 시 제거 완료 메시지 반환
- * @response 404 - restaurantId가 유효하지 않음
+/* 즐겨찾기 삭제 라우터
+ * 매서드: DELETE
+ * 엔드포인트: /api/favorites/:restaurantId
  */
 r.delete("/:restaurantId", onlyDigits404, removeFavoriteById);
 
