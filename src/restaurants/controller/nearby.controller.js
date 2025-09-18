@@ -1,6 +1,4 @@
 // 위치: src / restaurants / controller / nearby.controller.js
-// 제작자: 김민호
-// 최종 수정일: 2025 09 16 21:48
 import { StatusCodes } from "http-status-codes";
 import { searchLocal } from "../service/naver.service.js";
 import { ensureRestaurant } from "../service/restaurants.service.js";

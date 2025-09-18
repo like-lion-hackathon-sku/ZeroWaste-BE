@@ -1,6 +1,4 @@
 // 위치: src / restaurants / controller / restaurans.controller.js
-// 제작자: 김민호
-// 최종 수정일: 2025 09 16 21:51
 import { StatusCodes } from "http-status-codes";
 import {
   ensureRestaurant,

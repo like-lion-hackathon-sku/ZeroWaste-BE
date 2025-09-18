@@ -1,6 +1,4 @@
 // 위치: src / restaurants / router / restaurants.router.js
-// 제작자: 김민호
-// 최종 수정일: 2025 09 16 21:48
 import { Router } from "express";
 import {
   ensureRestaurantCtrl,

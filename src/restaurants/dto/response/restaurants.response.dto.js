@@ -1,6 +1,4 @@
 // 위치: src / restaurants / dto / response / restaurans.response.dto.js
-// 제작자: 김민호
-// 최종 수정일: 2025 09 16 21:53
 
 /* 식당 확보(멱등) 응답 DTO
  *

@@ -1,6 +1,4 @@
 // 위치: src / restaurants / service / naver.service.js
-// 제작자: 김민호
-// 최종 수정일: 2025 09 16 21:48
 import "dotenv/config";
 import axios from "axios";
 

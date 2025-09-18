@@ -1,6 +1,4 @@
 // 위치: src / restaurants / service / restaurants.service.js
-// 제작자: 김민호
-// 최종 수정일: 2025 09 16 21:48
 import * as restRepo from "../repository/restaurants.repository.js";
 
 /* 카테고리 문자열을 DB의 카테고리로 변환하는 함수

@@ -1,6 +1,4 @@
 // 위치: src / restaurants / dto / request / restaurans.request.dto.js
-// 제작자: 김민호
-// 최종 수정일: 2025 09 16 21:52
 
 /* Restaurant 멱등 확보 요청 DTO
  *
